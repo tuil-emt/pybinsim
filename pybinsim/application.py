@@ -61,10 +61,15 @@ class BinSimConfig(object):
                                   'filterList': 'brirs/filter_list_kemar5.txt',
                                   'enableCrossfading': False,
                                   'useHeadphoneFilter': False,
+                                  'headphoneFilterSize': 16384,
                                   'loudnessFactor': float(1),
                                   'maxChannels': 8,
                                   'samplingRate': 44100,
-                                  'loopSound': True}
+                                  'loopSound': True,
+                                  'useSplittedFilters': False,
+                                  'lateReverbSize': 16384,
+                                  'pauseConvolution': False,
+                                  'pauseAudioPlayback': False}
 
     def read_from_file(self, filepath):
         config = open(filepath, 'r')
@@ -96,6 +101,12 @@ class BinSimConfig(object):
     def get(self, setting):
         return self.configurationDict[setting]
 
+    def set(self, setting, value):
+        value = parse_boolean(value)
+        if type(self.configurationDict[setting]) == type(value):
+            self.configurationDict[setting] = value
+        else:
+            self.log.warning('New value for entry ' + setting + ' has wrong type: ' + str(type(value)))
 
 class BinSim(object):
     """
@@ -156,10 +167,14 @@ class BinSim(object):
         # Create FilterStorage
         filterStorage = FilterStorage(self.config.get('filterSize'),
                                       self.blockSize,
-                                      self.config.get('filterList'))
+                                      self.config.get('filterList'),
+                                      self.config.get('useHeadphoneFilter'),
+                                      self.config.get('headphoneFilterSize'),
+                                      self.config.get('useSplittedFilters'),
+                                      self.config.get('lateReverbSize'))
 
         # Start an oscReceiver
-        oscReceiver = OscReceiver()
+        oscReceiver = OscReceiver(self.current_config)
         oscReceiver.start_listening()
         time.sleep(1)
 
@@ -175,13 +190,13 @@ class BinSim(object):
         convolvers = [None] * self.nChannels
         for n in range(self.nChannels):
             convolvers[n] = ConvolverFFTW(self.config.get(
-                'filterSize'), self.blockSize, False)
+                'filterSize'), self.blockSize, False, self.config.get('useSplittedFilters'), self.config.get('lateReverbSize'))
 
         # HP Equalization convolver
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
             convolverHP = ConvolverFFTW(self.config.get(
-                'filterSize'), self.blockSize, True)
+                'headphoneFilterSize'), self.blockSize, True)
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setIR(hpfilter, False)
 
@@ -213,6 +228,10 @@ def audio_callback(binsim):
             import debugpy
             debugpy.debug_this_thread()
 
+        # Update config
+        binsim.current_config = binsim.oscReceiver.get_current_config()
+
+        # Update audio files
         current_soundfile_list = binsim.oscReceiver.get_sound_file_list()
         if current_soundfile_list:
             binsim.soundHandler.request_new_sound_file(current_soundfile_list)
@@ -222,43 +241,56 @@ def audio_callback(binsim):
         if amount_channels == 0:
             return
 
-        binsim.block[:amount_channels, :] = binsim.soundHandler.buffer_read()
+        if binsim.current_config.get('pauseAudioPlayback'):
+            binsim.block[:amount_channels, :] = binsim.soundHandler.read_zeros()
+        else:
+            binsim.block[:amount_channels, :] = binsim.soundHandler.buffer_read()
 
-        # Update Filters and run each convolver with the current block
-        for n in range(amount_channels):
-
-            # Get new Filter
-            if binsim.oscReceiver.is_filter_update_necessary(n):
-                filterValueList = binsim.oscReceiver.get_current_values(n)
-                filter = binsim.filterStorage.get_filter(
-                    Pose.from_filterValueList(filterValueList))
-                binsim.convolvers[n].setIR(
-                    filter, callback.config.get('enableCrossfading'))
-
-            left, right = binsim.convolvers[n].process(binsim.block[n, :])
-
-            # Sum results from all convolvers
-            if n == 0:
-                binsim.result[:, 0] = left
-                binsim.result[:, 1] = right
+        if binsim.current_config.get('pauseConvolution'):
+            if binsim.soundHandler.get_sound_channels() == 2:
+                binsim.result = np.transpose(binsim.block[:binsim.soundHandler.get_sound_channels(), :])
             else:
-                binsim.result[:, 0] = np.add(binsim.result[:, 0], left)
-                binsim.result[:, 1] = np.add(binsim.result[:, 1], right)
+                mix = np.mean(binsim.block[:binsim.soundHandler.get_sound_channels(), :], 0)
+                binsim.result[:, 0] = mix
+                binsim.result[:, 1] = mix
+        else:
+            # Update Filters and run each convolver with the current block
+            for n in range(amount_channels):
 
-        # Finally apply Headphone Filter
-        if callback.config.get('useHeadphoneFilter'):
-            binsim.result[:, 0], binsim.result[:,
-                                               1] = binsim.convolverHP.process(binsim.result)
+                # Get new Filter
+                if binsim.oscReceiver.is_filter_update_necessary(n):
+                    filterValueList = binsim.oscReceiver.get_current_values(n)
+                    filter = binsim.filterStorage.get_filter(
+                        Pose.from_filterValueList(filterValueList))
+                    binsim.convolvers[n].setIR(
+                        filter, callback.config.get('enableCrossfading'))
+
+                left, right = binsim.convolvers[n].process(binsim.block[n, :])
+
+                # Sum results from all convolvers
+                if n == 0:
+                    binsim.result[:, 0] = left
+                    binsim.result[:, 1] = right
+                else:
+                    binsim.result[:, 0] = np.add(binsim.result[:, 0], left)
+                    binsim.result[:, 1] = np.add(binsim.result[:, 1], right)
+
+            # Finally apply Headphone Filter
+            if callback.config.get('useHeadphoneFilter'):
+                binsim.result[:, 0], binsim.result[:, 1] = binsim.convolverHP.process(binsim.result)
 
         # Scale data
-        binsim.result = np.divide(binsim.result, float(
-            (amount_channels) * 2))
-        binsim.result = np.multiply(
-            binsim.result, callback.config.get('loudnessFactor'))
+        binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
+        binsim.result = np.multiply(binsim.result, callback.config.get('loudnessFactor'))
 
         outdata[:, 0] = binsim.result[:, 0]
         outdata[:, 1] = binsim.result[:, 1]
+        
+        # Report buffer underrun
+        if status == 4:
+            binsim.log.warn('Output buffer underrun occurred')
 
+        # Report clipping
         if np.max(np.abs(binsim.result)) > 1:
             binsim.log.warn('Clipping occurred: Adjust loudnessFactor!')
 

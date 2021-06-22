@@ -39,7 +39,7 @@ class ConvolverFFTW(object):
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size, block_size, process_stereo):
+    def __init__(self, ir_size, block_size, process_stereo, useSplittedFilters = False, lateReverbSize = 0):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.ConvolverFFTW")
@@ -48,12 +48,23 @@ class ConvolverFFTW(object):
         # pyFFTW Options
         pyfftw.interfaces.cache.enable()
         # self.fftw_planning_effort = 'FFTW_MEASURE'
-        self.fftw_planning_effort = 'FFTW_PATIENT'
+        #self.fftw_planning_effort = 'FFTW_PATIENT'
+        self.fftw_planning_effort = 'FFTW_ESTIMATE'
         # self.fftw_planning_effort ='FFTW_EXHAUSTIVE' # takes 5..10 minutes
 
         # Get Basic infos
         self.IR_size = ir_size
         self.block_size = block_size
+        self.reverbSize = lateReverbSize
+        self.late_IR_blocks = 0
+        
+        self.useSplittedFilters = useSplittedFilters
+        
+        if self.useSplittedFilters:
+            # Needed for concatenating filters
+            self.late_IR_blocks = self.reverbSize // block_size
+            # Size used for convolution changes
+            self.IR_size += self.reverbSize
 
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
@@ -62,12 +73,21 @@ class ConvolverFFTW(object):
         #self.crossFadeIn = np.array(range(0, self.block_size), dtype='float32')
         #self.crossFadeIn *= 1 / float((self.block_size - 1))
         #self.crossFadeOut = np.flipud(self.crossFadeIn)
+        self.late_early_transition = self.IR_blocks - self.late_IR_blocks
 
-        # Calculate COSINE-Square crossfade windows
+        # Calculate time domain COSINE-Square crossfade windows
         self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
         self.crossFadeOut = np.square(
             np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
         self.crossFadeIn = np.flipud(self.crossFadeOut)
+
+        # Define freq domain crossfade windows (COSINE-Square)
+        # self.crossFadeIn = np.zeros(self.block_size+1, dtype='complex64')
+        # self.crossFadeIn[0] = self.block_size
+        # self.crossFadeIn[1] = np.multiply(self.block_size, 0.5)
+        # self.crossFadeOut = np.zeros(self.block_size+1, dtype='complex64')
+        # self.crossFadeOut[0] = self.block_size
+        # self.crossFadeOut[1] = np.multiply(self.block_size, -0.5)
 
         # Filter format: [nBlocks,blockSize*2]
 
@@ -77,7 +97,7 @@ class ConvolverFFTW(object):
             loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
             pyfftw.import_wisdom(loaded_wisdom)
 
-        # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are ransformed to
+        # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
         # freq domain regularly
         self.log.info("Convolver: Start Init buffer fft plans")
         self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
@@ -91,33 +111,31 @@ class ConvolverFFTW(object):
 
         # Create arrays for the filters and the FDLs.
         self.log.info("Convolver: Start Init filter fft plans")
-        self.TF_left_blocked = np.zeros(
-            (self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_right_blocked = np.zeros(
-            (self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_left_blocked_previous = np.zeros(
-            (self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_right_blocked_previous = np.zeros(
-            (self.IR_blocks, self.block_size + 1), dtype='complex64')
+        
+        self.TF_late_left_blocked = np.zeros((self.late_IR_blocks, self.block_size + 1), dtype='complex64')
+        self.TF_late_right_blocked = np.zeros((self.late_IR_blocks, self.block_size + 1), dtype='complex64')
+        
+        self.TF_left_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.TF_right_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.TF_left_blocked_previous = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.TF_right_blocked_previous = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
 
-        self.filter_fftw_plan = pyfftw.builders.rfft(np.zeros(self.block_size, dtype=np.float32), n=self.block_size * 2, overwrite_input=True,
-                                                     threads=nThreads, planner_effort=self.fftw_planning_effort,
-                                                     avoid_copy=False)
-
-        self.FDL_size = self.IR_blocks * (self.block_size + 1)
-        self.FDL_left = np.zeros(self.FDL_size, dtype='complex64')
-        self.FDL_right = np.zeros(self.FDL_size, dtype='complex64')
+        #self.filter_fftw_plan = pyfftw.builders.rfft(np.zeros(self.block_size, dtype=np.float32), n=self.block_size * 2, overwrite_input=True,
+        #                                             threads=nThreads, planner_effort=self.fftw_planning_effort,
+        #                                             avoid_copy=False)
+        #self.FDL_size = self.IR_blocks * (self.block_size + 1)
+        #self.FDL_left = np.zeros(self.FDL_size, dtype='complex64')
+        #self.FDL_right = np.zeros(self.FDL_size, dtype='complex64')
+        
+        self.FDL_left = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.FDL_right = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
 
         # Arrays for the result of the complex multiply and add
         # These should be memory aligned because ifft is performed with these data
-        self.resultLeftFreq = pyfftw.zeros_aligned(
-            self.block_size + 1, dtype='complex64')
-        self.resultRightFreq = pyfftw.zeros_aligned(
-            self.block_size + 1, dtype='complex64')
-        self.resultLeftFreqPrevious = pyfftw.zeros_aligned(
-            self.block_size + 1, dtype='complex64')
-        self.resultRightFreqPrevious = pyfftw.zeros_aligned(
-            self.block_size + 1, dtype='complex64')
+        self.resultLeftFreq = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
+        self.resultRightFreq = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
+        self.resultLeftFreqPrevious = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
+        self.resultRightFreqPrevious = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
 
         self.log.info("Convolver: Start Init result ifft plans")
         self.resultLeftIFFTPlan = pyfftw.builders.irfft(self.resultLeftFreq,
@@ -150,6 +168,9 @@ class ConvolverFFTW(object):
 
         # Flag for interpolation of output blocks (result of process())
         self.interpolate = False
+        
+        # Flag which initiates filter rebuild (combining early and late part)
+        self.buildNewFilter = False
 
         # Select mono or stereo processing
         self.processStereo = process_stereo
@@ -186,6 +207,25 @@ class ConvolverFFTW(object):
                 IR_left_blocked[ir_block_count])
             self.TF_right_blocked[ir_block_count] = self.filter_fftw_plan(
                 IR_right_blocked[ir_block_count])
+
+    def buildFilters(self):
+        """
+        Build filter from early and late part
+
+        :param filter:
+        :return: transformed filter
+        """
+        # Attach late part; Filter will be shorter by one block afterwards
+        if self.useSplittedFilters and self.buildNewFilter:
+            # Overlap last block of early filters with first block of late reverb
+            self.TF_left_blocked[self.late_early_transition-1, :] = np.add(self.TF_left_blocked[self.late_early_transition-1, :], self.TF_late_left_blocked[0, :])
+            self.TF_right_blocked[self.late_early_transition-1, :] = np.add(self.TF_right_blocked[self.late_early_transition-1, :], self.TF_late_right_blocked[0, :])
+            
+            # Add all other late filter blocks
+            self.TF_left_blocked[self.late_early_transition:-1, :] = self.TF_late_left_blocked[1:, :]
+            self.TF_right_blocked[self.late_early_transition:-1, :] = self.TF_late_right_blocked[1:, :]
+
+            self.buildNewFilter = False
 
     def setIR(self, filter, do_interpolation):
         """
