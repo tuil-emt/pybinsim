@@ -21,46 +21,141 @@
 # SOFTWARE.
 
 import logging
-import multiprocessing
+import multiprocessing as mp
+import enum
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 
+import pyfftw
+import time
+
 from pybinsim.pose import Pose
 from pybinsim.utility import total_size
 
-nThreads = multiprocessing.cpu_count()
+nThreads = mp.cpu_count()
 
 
 class Filter(object):
 
     def __init__(self, inputfilter, irBlocks, block_size, filename=None):
+        self.log = logging.getLogger("pybinsim.Filter")
 
-        self.IR_left_blocked = np.reshape(
-            inputfilter[:, 0], (irBlocks, block_size))
-        self.IR_right_blocked = np.reshape(
-            inputfilter[:, 1], (irBlocks, block_size))
+        self.ir_blocks = irBlocks
+        self.block_size = block_size
+
+        self.TF_blocks = irBlocks
+        self.TF_block_size = block_size + 1
+    
+        self.IR_left_blocked = np.reshape(inputfilter[:, 0], (irBlocks, block_size))
+        self.IR_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
         self.filename = filename
+        
+        self.fd_available = False
+        self.TF_left_blocked = None
+        self.TF_right_blocked = None
 
     def getFilter(self):
         return self.IR_left_blocked, self.IR_right_blocked
+    
+    def getFilterTD(self):
+        if self.fd_available:
+            self.log.warning("FilterStorage: No time domain filter available!")
+            left = np.zeros((self.ir_blocks, self.block_size))
+            right = np.zeros((self.ir_blocks, self.block_size))
+        else:
+            left = self.IR_left_blocked
+            right = self.IR_right_blocked
 
+        return left, right
+
+    def apply_fadeout(self,window):
+        self.IR_left_blocked[self.ir_blocks-1, :] = np.multiply(self.IR_left_blocked[self.ir_blocks-1, :], window)
+        self.IR_right_blocked[self.ir_blocks-1, :] = np.multiply(self.IR_right_blocked[self.ir_blocks-1, :], window)
+
+    def apply_fadein(self,window):
+        self.IR_left_blocked[0, :] = np.multiply(self.IR_left_blocked[0, :], window)
+        self.IR_right_blocked[0, :] = np.multiply(self.IR_right_blocked[0, :], window)
+
+    def storeInFDomain(self,fftw_plan):
+        self.TF_left_blocked = np.zeros((self.ir_blocks, self.block_size + 1), dtype='complex64')
+        self.TF_right_blocked = np.zeros((self.ir_blocks, self.block_size + 1), dtype='complex64')
+
+        self.TF_left_blocked [:] = fftw_plan(self.IR_left_blocked)
+        self.TF_right_blocked [:] = fftw_plan(self.IR_right_blocked)
+
+        self.fd_available = True
+
+        # Discard time domain data
+        self.IR_left_blocked = None
+        self.IR_right_blocked = None
+
+    def getFilterFD(self):
+        if not self.fd_available:
+            self.log.warning("FilterStorage: No frequency domain filter available!")
+            left = np.zeros((self.ir_blocks, self.block_size+1))
+            right = np.zeros((self.ir_blocks, self.block_size+1))
+        else:
+            left = self.TF_left_blocked
+            right = self.TF_right_blocked
+
+        return left, right
+
+class FilterType(enum.Enum):
+    Undefined = 0
+    Filter = 1
+    LateReverbFilter = 2
 
 class FilterStorage(object):
     """ Class for storing all filters mentioned in the filter list """
 
-    def __init__(self, irSize, block_size, filter_list_name):
+    #def __init__(self, irSize, block_size, filter_list_name):
+    def __init__(self, irSize, block_size, filter_list_name, useHeadphoneFilter = False, headphoneFilterSize = 0, useSplittedFilters = False, lateReverbSize = 0):
 
         self.log = logging.getLogger("pybinsim.FilterStorage")
         self.log.info("FilterStorage: init")
+        
+        pyfftw.interfaces.cache.enable()
+        fftw_planning_effort ='FFTW_ESTIMATE'
 
         self.ir_size = irSize
         self.ir_blocks = irSize // block_size
         self.block_size = block_size
-        self.default_filter = Filter(
-            np.zeros((self.ir_size, 2), dtype='float32'), self.ir_blocks, self.block_size)
+        
+        self.filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ir_blocks,self.block_size), dtype='float32'),n=self.block_size*2,axis = 1, threads=nThreads, planner_effort=fftw_planning_effort)
+        
+        self.default_filter = Filter(np.zeros((self.ir_size, 2), dtype='float32'), self.ir_blocks, self.block_size)
+        self.default_filter.storeInFDomain(self.filter_fftw_plan)
+        
+        # Calculate COSINE-Square crossfade windows
+        self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
+        self.crossFadeOut = np.square(np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
+        self.crossFadeIn = np.flipud(self.crossFadeOut)
 
+        self.useHeadphoneFilter = useHeadphoneFilter
+        if useHeadphoneFilter:
+            self.headPhoneFilterSize = headphoneFilterSize
+            self.headphone_ir_blocks = headphoneFilterSize // block_size
+
+            self.hp_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.headphone_ir_blocks, self.block_size), dtype='float32'),
+                                                          n=self.block_size * 2, axis=1, overwrite_input=False,
+                                                          threads=nThreads, planner_effort=fftw_planning_effort,
+                                                          avoid_copy=False)
+
+        self.useSplittedFilters = useSplittedFilters
+        if useSplittedFilters:
+            self.lateReverbSize = lateReverbSize
+            self.late_ir_blocks = lateReverbSize // block_size
+
+            self.late_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.late_ir_blocks, self.block_size), dtype='float32'),
+                                                         n=self.block_size * 2, axis=1, overwrite_input=False,
+                                                         threads=nThreads, planner_effort=fftw_planning_effort,
+                                                         avoid_copy=False)
+
+            self.default_late_reverb_filter = Filter(np.zeros((self.lateReverbSize, 2), dtype='float32'), self.late_ir_blocks, self.block_size)
+            self.default_late_reverb_filter.storeInFDomain(self.late_filter_fftw_plan)
+        
         self.filter_list_path = filter_list_name
         self.filter_list = open(self.filter_list_path, 'r')
 
@@ -68,6 +163,7 @@ class FilterStorage(object):
 
         # format: [key,{filter}]
         self.filter_dict = {}
+        self.late_reverb_filter_dict = {}
 
         # Start to load filters
         self.load_filters()
@@ -95,18 +191,42 @@ class FilterStorage(object):
             line_content = line.split()
             filter_path = line_content[-1]
 
+            #if line.startswith('HPFILTER'):
+            # handle headphone filter
             if line.startswith('HPFILTER'):
-                self.log.info(
-                    "Loading headphone filter: {}".format(filter_path))
-                self.headphone_filter = Filter(self.load_filter(
-                    filter_path), self.ir_blocks, self.block_size)
+                if self.useHeadphoneFilter:
+                    self.log.info("Loading headphone filter: {}".format(filter_path))
+                    self.headphone_filter = Filter(self.load_filter(filter_path), self.headphone_ir_blocks, self.block_size)
+                    self.headphone_filter.storeInFDomain(self.hp_filter_fftw_plan)
+                    continue
+
+                #self.headphone_filter = Filter(self.load_filter(filter_path), self.ir_blocks, self.block_size)
+                self.log.info("Skipping headphone filter: {}".format(filter_path))
                 continue
 
-            filter_value_list = tuple(line_content[0:-1])
+            #filter_value_list = tuple(line_content[0:-1])
+            #pose = Pose.from_filterValueList(filter_value_list)
+            
+            # handle normal filters and late reverb filters
+            filter_value_list = tuple(line_content[1:-1])
+            filter_pose = Pose.from_filterValueList(filter_value_list)
+            filter_type = FilterType.Undefined
 
-            pose = Pose.from_filterValueList(filter_value_list)
+            if line.startswith('FILTER'):
+                filter_type = FilterType.Filter
+            elif line.startswith('LATEREVERB') and self.useSplittedFilters:
+                self.log.info("Loading late reverb filter: {}".format(filter_path))
+                filter_type = FilterType.LateReverbFilter
+            elif line.startswith('LATEREVERB'):
+                self.log.info("Skipping LATEREVERB filter: {}".format(filter_path))
+                continue
+            else:
+                filter_type = FilterType.Undefined
+                raise RuntimeError("Filter indentifier wrong or missing")
 
-            yield pose, filter_path
+
+            #yield pose, filter_path
+            yield filter_pose, filter_path, filter_type
 
     def load_filters(self):
         """
@@ -115,6 +235,7 @@ class FilterStorage(object):
         :return: None
         """
 
+        ### Continue here
         self.log.info("Start loading filters...")
         parsed_filter_list = list(self.parse_filter_list())
 
