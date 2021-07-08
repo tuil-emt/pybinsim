@@ -199,10 +199,11 @@ class FilterStorage(object):
                     self.headphone_filter = Filter(self.load_filter(filter_path), self.headphone_ir_blocks, self.block_size)
                     self.headphone_filter.storeInFDomain(self.hp_filter_fftw_plan)
                     continue
-
-                #self.headphone_filter = Filter(self.load_filter(filter_path), self.ir_blocks, self.block_size)
-                self.log.info("Skipping headphone filter: {}".format(filter_path))
-                continue
+                else
+                    #self.headphone_filter = Filter(self.load_filter(filter_path), self.ir_blocks, self.block_size)
+                    self.log.info("Skipping headphone filter: {}".format(filter_path))
+                    continue
+                
 
             #filter_value_list = tuple(line_content[0:-1])
             #pose = Pose.from_filterValueList(filter_value_list)
@@ -235,32 +236,68 @@ class FilterStorage(object):
         :return: None
         """
 
-        ### Continue here
         self.log.info("Start loading filters...")
+        start = time.time()
         parsed_filter_list = list(self.parse_filter_list())
 
-        # check if all files are available
-        are_files_missing = False
-        for pose, filter_path in parsed_filter_list:
-            fn_filter = Path(filter_path)
-            if not fn_filter.exists():
+#        # check if all files are available
+#        are_files_missing = False
+#        for pose, filter_path in parsed_filter_list:
+#            fn_filter = Path(filter_path)
+#            if not fn_filter.exists():
+#                self.log.warn(f'Wavefile not found: {fn_filter}')
+#                are_files_missing = True
+#        if are_files_missing:
+#            raise FileNotFoundError("Some files are missing")
+#
+#        for pose, filter_path in parsed_filter_list:
+#            self.log.debug('Loading {}'.format(filter_path))
+#
+#            loaded_filter = self.load_filter(filter_path)
+#            current_filter = Filter(
+#                loaded_filter, self.ir_blocks, self.block_size, filename=filter_path)
+#
+#            # create key and store in dict.
+#            key = pose.create_key()
+#            self.filter_dict.update({key: current_filter})
+
+        for filter_pose, filter_path, filter_type in parsed_filter_list:
+            # Skip undefined types (e.g. old format)
+            if filter_type == FilterType.Undefined:
+                continue
+            
+            # check for missing filters and throw exception if not found
+            if not Path(filter_path).exists():
                 self.log.warn(f'Wavefile not found: {fn_filter}')
-                are_files_missing = True
-        if are_files_missing:
-            raise FileNotFoundError("Some files are missing")
-
-        for pose, filter_path in parsed_filter_list:
-            self.log.debug('Loading {}'.format(filter_path))
-
-            loaded_filter = self.load_filter(filter_path)
-            current_filter = Filter(
-                loaded_filter, self.ir_blocks, self.block_size, filename=filter_path)
-
-            # create key and store in dict.
-            key = pose.create_key()
-            self.filter_dict.update({key: current_filter})
-
-        self.log.info("Finished loading filters.")
+                raise FileNotFoundError(f'File {fn_filter} is missing.')
+            
+            self.log.debug(f'Loading {filter_path}')
+            if filter_type == FilterType.Filter:
+                # preprocess filters and put them in a dict
+                current_filter = Filter(self.load_filter(filter.path), self-ir_blocks, self.block_size)
+                
+                # apply fade out to all filters
+                current_filter.apply_fadeout(self.crossFadeOut)
+                current_filter.storeInFDomain(seld.filter.fftw_plan)
+                
+                # create key and store in dict
+                key = filter_pose.create_key()
+                self.filter_dict.update({key: current_filter})
+            
+            if filter_type == FilterType.LateReverbFilter:
+                # preprocess late reverb filters and put them in a separate dict
+                current_filter = Filter(self.load_filter(filter_path), self.late_ir_blocks, self.block_size)
+                
+                # apply fade in to all late reverb filters
+                current_filter.apply_fadein(self.crossFadeIn)
+                current_filter.storeInFDomain(self.late_filter_fftw_plan)
+                
+                #create key and store in dict
+                key = filter_pose.create_key()
+                self.late_reverb_filter_dict.update({key: current_filter})
+        
+        end = time.time()
+        self.log.info("Finished loading filters in" + str(end-start) + "sec.")
         #self.log.info("filter_dict size: {}MiB".format(total_size(self.filter_dict) // 1024 // 1024))
 
     def get_filter(self, pose):
@@ -284,6 +321,16 @@ class FilterStorage(object):
             self.log.warning('Filter not found: key: {}'.format(key))
             return self.default_filter
 
+    def get_late_Reverb_filter(self, pose):
+        key = pose.create_key()
+        
+        if key in self.late_reverb_filter_dict:
+            self.log.info(f'Late Reverb Filter found: key: {key}')
+            return self.late_reverb_filter_dict.get(key)
+        else:
+            self.log.warning(f'Late Reverb Filter not found: key: {key}')
+            return self.default_late_reverb_filter
+
     def close(self):
         self.log.info('FilterStorage: close()')
         # TODO: do something in here?
@@ -300,6 +347,7 @@ class FilterStorage(object):
 
         filter_size = np.shape(current_filter)
 
+        ## Question: is this still needed?
         # Fill filter with zeros if to short
         if filter_size[0] < self.ir_size:
             self.log.warning('Filter too short: Fill up with zeros')

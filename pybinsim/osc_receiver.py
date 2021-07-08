@@ -22,6 +22,7 @@
 
 import logging
 import threading
+import numpy as np
 
 from pythonosc import dispatcher
 from pythonosc import osc_server
@@ -32,7 +33,8 @@ class OscReceiver(object):
     Class for receiving OSC Messages to control pyBinSim
     """
 
-    def __init__(self):
+    #def __init__(self):
+    def __init__(self,current_config
 
         self.log = logging.getLogger("pybinsim.OscReceiver")
         self.log.info("oscReceiver: init")
@@ -41,23 +43,61 @@ class OscReceiver(object):
         self.ip = '127.0.0.1'
         self.port = 10000
         self.maxChannels = 100
+        
+        self.current_config = current_config
 
         # Default values; Stores filter keys for all channles/convolvers
         self.filters_updated = [True] * self.maxChannels
+        self.late_reverb_filters_updated = [True] * self.maxChannels
+        
+        self.default_filter_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
+        self.valueList_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
 
-        self.defaultValue = (0, 0, 0, 0, 0, 0, 0, 0, 0)
-        self.valueList = [self.defaultValue] * self.maxChannels
+        self.default_late_reverb_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
+        self.valueList_late_reverb = np.tile(self.default_late_reverb_value, [self.maxChannels, 1])
+
+#        self.defaultValue = (0, 0, 0, 0, 0, 0, 0, 0, 0)
+#        self.valueList = [self.defaultValue] * self.maxChannels
+
         # self.valueList = [()] * self.maxChannels
         self.soundFileList = ''
         self.soundFileNew = False
 
         osc_dispatcher = dispatcher.Dispatcher()
-        osc_dispatcher.map("/pyBinSim", self.handle_filter_input)
+        osc_dispatcher.map("/pyBinSim", self.handle_filter_input) ## <- is this needed?
         osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
+        osc_dispatcher.map("/pyBinSimFilterShort", self.handle_filter_input)
+        osc_dispatcher.map("/pyBinSimFilterOrientation", self.handle_filter_input)
+        osc_dispatcher.map("/pyBinSimFilterPosition", self.handle_filter_input)
+        osc_dispatcher.map("/pyBinSimFilterCustom", self.handle_filter_input)
+        osc_dispatcher.map("/pyBinSimLateReverbFilter", self.handle_late_reverb_input)
+        osc_dispatcher.map("/pyBinSimLateReverbFilterShort", self.handle_late_reverb_input)
+        osc_dispatcher.map("/pyBinSimLateReverbFilterOrientation", self.handle_late_reverb_input)
+        osc_dispatcher.map("/pyBinSimLateReverbFilterPosition", self.handle_late_reverb_input)
+        osc_dispatcher.map("/pyBinSimLateReverbFilterCustom", self.handle_late_reverb_input)
+        osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
+        osc_dispatcher.map("/pyBinSimPauseAudioPlayback", self.handle_audio_pause)
+        osc_dispatcher.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
 
         self.server = osc_server.ThreadingOSCUDPServer(
             (self.ip, self.port), osc_dispatcher)
 
+    def select_slice(self, i):
+        switcher = {
+            "/pyBinSimFilter": slice(0, 9),
+            "/pyBinSimFilterShort": slice(0, 6),
+            "/pyBinSimFilterOrientation": slice(0, 3),
+            "/pyBinSimFilterPosition": slice(3, 6),
+            "/pyBinSimFilterCustom": slice(6, 9),
+            "/pyBinSimLateReverbFilter": slice(0, 9),
+            "/pyBinSimLateReverbFilterShort": slice(0, 6),
+            "/pyBinSimLateReverbFilterOrientation": slice(0, 3),
+            "/pyBinSimLateReverbFilterPosition": slice(3, 6),
+            "/pyBinSimLateReverbFilterCustom": slice(6, 9)
+        }
+        return switcher.get(i, [])
+
+## Hier geht's weiter
     def handle_filter_input(self, identifier, channel, *args):
         """
         Handler for tracking information
