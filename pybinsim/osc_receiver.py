@@ -97,7 +97,6 @@ class OscReceiver(object):
         }
         return switcher.get(i, [])
 
-## Hier geht's weiter
     def handle_filter_input(self, identifier, channel, *args):
         """
         Handler for tracking information
@@ -120,13 +119,50 @@ class OscReceiver(object):
         self.log.info("Args: {}".format(str(args)))
 
         current_channel = channel
+        key_slice = self.select_slice(identifier)
 
-        if args != self.valueList[current_channel]:
-            #self.log.info("new filter")
-            self.filters_updated[current_channel] = True
-            self.valueList[current_channel] = tuple(args)
+        #if args != self.valueList[current_channel]:
+        #    #self.log.info("new filter")
+        #    self.filters_updated[current_channel] = True
+        #    self.valueList[current_channel] = tuple(args)
+        #else:
+        #    self.log.info("same filter as before")
+        
+        if len(args) == len(self.valueList_filter[current_channel, key_slice]):
+            if all(args == self.valueList_filter[current_channel, key_slice]):
+                self.log.info("Same filter as before")
+            else:
+                self.filters_updated[current_channel] = True
+                self.valueList_filter[current_channel, key_slice] = args
         else:
-            self.log.info("same filter as before")
+            self.log.info("OSC identifier and key mismatch")
+            
+        self.log.info("Channel: {}".format(str(channel)))
+        self.log.info("Current Filter List: {}".format(str(self.valueList_filter[current_channel, :])))
+
+    def handle_late_reverb_input(self, identifier, channel, *args):
+        """
+        Handler for tracking information
+
+        :param identifier:
+        :param channel:
+        :param args:
+        :return:
+        """
+        current_channel = channel
+        key_slice = self.select_slice(identifier)
+
+        if len(args) == len(self.valueList_late_reverb[current_channel, key_slice]):
+            if all(args == self.valueList_late_reverb[current_channel, key_slice]):
+                self.log.info("Same late reverb filter as before")
+            else:
+                self.late_reverb_filters_updated[current_channel] = True
+                self.valueList_late_reverb[current_channel, key_slice] = args
+        else:
+            self.log.info('OSC identifier and key mismatch')
+
+        self.log.info("Channel: {}".format(str(channel)))
+        self.log.info("Current Late Reverb Filter List: {}".format(str(self.valueList_late_reverb[current_channel, :])))
 
     def handle_file_input(self, identifier, soundpath):
         """ Handler for playlist control"""
@@ -136,6 +172,18 @@ class OscReceiver(object):
 
         self.log.info("soundPath: {}".format(soundpath))
         self.soundFileList = soundpath
+        
+    def handle_audio_pause(self, identifier, value):
+        """ Handler for playback control"""
+        assert identifier == "/pyBinSimPauseAudioPlayback"
+
+        self.currentConfig.set('pauseAudioPlayback', value)
+
+    def handle_convolution_pause(self, identifier, value):
+        """ Handler for playback control"""
+        assert identifier == "/pyBinSimPauseConvolution"
+
+        self.currentConfig.set('pauseConvolution', value)
 
     def start_listening(self):
         """Start osc receiver in background Thread"""
@@ -149,11 +197,31 @@ class OscReceiver(object):
     def is_filter_update_necessary(self, channel):
         """ Check if there is a new filter for channel """
         return self.filters_updated[channel]
+    
+    def is_late_reverb_update_necessary(self, channel):
+        """ Check if there is a new late reverb filter for channel """
+        if self.currentConfig.get('useSplittedFilters'):
+            return self.late_reverb_filters_updated[channel]
+        else:
+            return False
 
-    def get_current_values(self, channel):
+    #def get_current_values(self, channel):
+    #    """ Return key for filter """
+    #    self.filters_updated[channel] = False
+    #    return self.valueList[channel]
+    
+    def get_current_filter_values(self, channel):
         """ Return key for filter """
         self.filters_updated[channel] = False
-        return self.valueList[channel]
+        return self.valueList_filter[channel,:]
+
+    def get_current_late_reverb_values(self, channel):
+        """ Return key for late reverb filters """
+        self.late_reverb_filters_updated[channel] = False
+        return self.valueList_late_reverb[channel,:]
+    
+    def get_current_config(self):
+        return self.currentConfig
 
     def get_sound_file_list(self):
         ret_list = self.soundFileList
