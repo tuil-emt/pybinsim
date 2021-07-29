@@ -424,7 +424,7 @@ class ConvolverFFTW(object):
             #self.outputLeft = np.add(np.multiply(self.outputLeft, self.crossFadeIn), np.multiply(self.resultLeftPreviousIFFTPlan(self.resultLeftFreqPrevious)[self.block_size:self.block_size * 2], self.crossFadeOut))
             self.outputLeft = np.add(np.multiply(self.outputLeft, self.crossFadeIn), np.multiply(self.resultLeftPreviousIFFTPlan()[self.block_size:self.block_size * 2], self.crossFadeOut))
             #self.outputRight = np.add(np.multiply(self.outputRight, self.crossFadeIn), np.multiply(self.resultRightPreviousIFFTPlan(self.resultRightFreqPrevious)[self.block_size:self.block_size * 2], self.crossFadeOut))
-            self.outputRight = np.add(np.multiply(self.outputRight, self.crossFadeIn), np.multiply(self.resultRightPreviousIFFTPlan()[self.block_size:self.blockSize*2], self.crossFadeOut))
+            self.outputRight = np.add(np.multiply(self.outputRight, self.crossFadeIn), np.multiply(self.resultRightPreviousIFFTPlan()[self.block_size:self.block_size*2], self.crossFadeOut))
 
         self.processCounter += 1
         self.interpolate = False

@@ -199,7 +199,7 @@ class FilterStorage(object):
                     self.headphone_filter = Filter(self.load_filter(filter_path), self.headphone_ir_blocks, self.block_size)
                     self.headphone_filter.storeInFDomain(self.hp_filter_fftw_plan)
                     continue
-                else
+                else:
                     #self.headphone_filter = Filter(self.load_filter(filter_path), self.ir_blocks, self.block_size)
                     self.log.info("Skipping headphone filter: {}".format(filter_path))
                     continue
@@ -266,6 +266,8 @@ class FilterStorage(object):
             if filter_type == FilterType.Undefined:
                 continue
             
+            fn_filter = Path(filter_path)
+            
             # check for missing filters and throw exception if not found
             if not Path(filter_path).exists():
                 self.log.warn(f'Wavefile not found: {fn_filter}')
@@ -274,11 +276,11 @@ class FilterStorage(object):
             self.log.debug(f'Loading {filter_path}')
             if filter_type == FilterType.Filter:
                 # preprocess filters and put them in a dict
-                current_filter = Filter(self.load_filter(filter.path), self-ir_blocks, self.block_size)
+                current_filter = Filter(self.load_filter(filter_path), self.ir_blocks, self.block_size)
                 
                 # apply fade out to all filters
                 current_filter.apply_fadeout(self.crossFadeOut)
-                current_filter.storeInFDomain(seld.filter.fftw_plan)
+                current_filter.storeInFDomain(self.filter_fftw_plan)
                 
                 # create key and store in dict
                 key = filter_pose.create_key()

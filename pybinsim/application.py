@@ -174,7 +174,7 @@ class BinSim(object):
                                       self.config.get('lateReverbSize'))
 
         # Start an oscReceiver
-        oscReceiver = OscReceiver(self.current_config)
+        oscReceiver = OscReceiver(self.config)
         oscReceiver.start_listening()
         time.sleep(1)
 
@@ -259,11 +259,15 @@ def audio_callback(binsim):
 
                 # Get new Filter
                 if binsim.oscReceiver.is_filter_update_necessary(n):
-                    filterValueList = binsim.oscReceiver.get_current_values(n)
-                    filter = binsim.filterStorage.get_filter(
-                        Pose.from_filterValueList(filterValueList))
-                    binsim.convolvers[n].setIR(
-                        filter, callback.config.get('enableCrossfading'))
+                    filterValueList = binsim.oscReceiver.get_current_filter_values(n)
+                    filter = binsim.filterStorage.get_filter(Pose.from_filterValueList(filterValueList))
+                    binsim.convolvers[n].setIR(filter, callback.config.get('enableCrossfading'))
+                    
+                # Get new late reverb Filter
+                if binsim.oscReceiver.is_late_reverb_update_necessary(n):
+                    lateReverbValueList = binsim.oscReceiver.get_current_late_reverb_values(n)
+                    latereverbfilter = binsim.filterStorage.get_late_reverb_filter(Pose.from_filterValueList(lateReverbValueList))
+                    binsim.convolvers[n].setLateReverb(latereverbfilter, callback.config.get('enableCrossfading'))
 
                 left, right = binsim.convolvers[n].process(binsim.block[n, :])
 

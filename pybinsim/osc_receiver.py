@@ -34,8 +34,7 @@ class OscReceiver(object):
     """
 
     #def __init__(self):
-    def __init__(self,current_config
-
+    def __init__(self,current_config):
         self.log = logging.getLogger("pybinsim.OscReceiver")
         self.log.info("oscReceiver: init")
 
@@ -44,7 +43,7 @@ class OscReceiver(object):
         self.port = 10000
         self.maxChannels = 100
         
-        self.current_config = current_config
+        self.currentConfig = current_config
 
         # Default values; Stores filter keys for all channles/convolvers
         self.filters_updated = [True] * self.maxChannels
