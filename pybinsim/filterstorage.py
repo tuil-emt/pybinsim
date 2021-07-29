@@ -209,17 +209,26 @@ class FilterStorage(object):
             #pose = Pose.from_filterValueList(filter_value_list)
             
             # handle normal filters and late reverb filters
-            filter_value_list = tuple(line_content[1:-1])
-            filter_pose = Pose.from_filterValueList(filter_value_list)
+            #filter_value_list = tuple(line_content[1:-1])
+            #filter_pose = Pose.from_filterValueList(filter_value_list)
             filter_type = FilterType.Undefined
-
-            if line.startswith('FILTER'):
+            
+            if line_content[0].isdigit():
                 filter_type = FilterType.Filter
-            elif line.startswith('LATEREVERB') and self.useSplittedFilters:
-                self.log.info("Loading late reverb filter: {}".format(filter_path))
-                filter_type = FilterType.LateReverbFilter
+                filter_value_list = tuple(line_content[:-1])
+                filter_pose = Pose.from_filterValueList(filter_value_list)
+            elif line.startswith('FILTER'):
+                filter_type = FilterType.Filter
+                filter_value_list = tuple(line_content[1:-1])
+                filter_pose = Pose.from_filterValueList(filter_value_list)
             elif line.startswith('LATEREVERB'):
-                self.log.info("Skipping LATEREVERB filter: {}".format(filter_path))
+                if self.useSplittedFilters:
+                    self.log.info("Loading late reverb filter: {}".format(filter_path))
+                    filter_type = FilterType.LateReverbFilter
+                    filter_value_list = tuple(line_content[1:-1])
+                    filter_pose = Pose.from_filterValueList(filter_value_list)
+                else:
+                    self.log.info("Skipping LATEREVERB filter: {}".format(filter_path))
                 continue
             else:
                 filter_type = FilterType.Undefined
