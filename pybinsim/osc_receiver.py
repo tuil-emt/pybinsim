@@ -63,7 +63,7 @@ class OscReceiver(object):
         self.soundFileNew = False
 
         osc_dispatcher = dispatcher.Dispatcher()
-        osc_dispatcher.map("/pyBinSim", self.handle_filter_input) ## <- is this needed?
+        osc_dispatcher.map("/pyBinSim", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
         osc_dispatcher.map("/pyBinSimFilterShort", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFilterOrientation", self.handle_filter_input)
@@ -106,27 +106,12 @@ class OscReceiver(object):
         :return:
         """
 
-        assert identifier == "/pyBinSim"
-        # assert all(isinstance(x, int) for x in args) == True
-
-        # Extend value list to support older scripts
-        # if (len(args)<6):
-        #    args=(args+(0,)*6)[:6]
-        #    print("filter value list incomplete")
-
         self.log.info("Channel: {}".format(str(channel)))
         self.log.info("Args: {}".format(str(args)))
 
         current_channel = channel
         key_slice = self.select_slice(identifier)
 
-        #if args != self.valueList[current_channel]:
-        #    #self.log.info("new filter")
-        #    self.filters_updated[current_channel] = True
-        #    self.valueList[current_channel] = tuple(args)
-        #else:
-        #    self.log.info("same filter as before")
-        
         if len(args) == len(self.valueList_filter[current_channel, key_slice]):
             if all(args == self.valueList_filter[current_channel, key_slice]):
                 self.log.info("Same filter as before")
