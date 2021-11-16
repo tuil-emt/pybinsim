@@ -65,6 +65,7 @@ class OscReceiver(object):
         osc_dispatcher = dispatcher.Dispatcher()
         osc_dispatcher.map("/pyBinSim", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
+        osc_dispatcher.map("/pyBinSimFilter", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFilterShort", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFilterOrientation", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFilterPosition", self.handle_filter_input)
