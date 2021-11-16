@@ -332,7 +332,7 @@ class FilterStorage(object):
             self.log.warning('Filter not found: key: {}'.format(key))
             return self.default_filter
 
-    def get_late_Reverb_filter(self, pose):
+    def get_late_reverb_filter(self, pose):
         key = pose.create_key()
         
         if key in self.late_reverb_filter_dict:
