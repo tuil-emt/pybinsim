@@ -229,7 +229,7 @@ class FilterStorage(object):
                     filter_pose = Pose.from_filterValueList(filter_value_list)
                 else:
                     self.log.info("Skipping LATEREVERB filter: {}".format(filter_path))
-                continue
+                    continue
             else:
                 filter_type = FilterType.Undefined
                 raise RuntimeError("Filter indentifier wrong or missing")
