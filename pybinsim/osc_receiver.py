@@ -115,7 +115,8 @@ class OscReceiver(object):
 
         if len(args) == len(self.valueList_filter[current_channel, key_slice]):
             if all(args == self.valueList_filter[current_channel, key_slice]):
-                self.log.warning("Same filter as before")
+                #self.log.warning("Same filter as before")
+                pass
             else:
                 self.filters_updated[current_channel] = True
                 self.valueList_filter[current_channel, key_slice] = args
@@ -138,8 +139,10 @@ class OscReceiver(object):
         key_slice = self.select_slice(identifier)
 
         if len(args) == len(self.valueList_late_reverb[current_channel, key_slice]):
+
             if all(args == self.valueList_late_reverb[current_channel, key_slice]):
-                self.log.warning("Same late reverb filter as before")
+                #self.log.warning("Same late reverb filter as before")
+                pass
             else:
                 self.late_reverb_filters_updated[current_channel] = True
                 self.valueList_late_reverb[current_channel, key_slice] = args
