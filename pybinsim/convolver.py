@@ -429,7 +429,7 @@ class ConvolverFFTW(object):
         self.processCounter += 1
         self.interpolate = False
 
-        return self.outputLeft, self.outputRight
+        return self.outputLeft, self.outputRight, self.processCounter
 
     def close(self):
         print("Convolver: close")

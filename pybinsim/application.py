@@ -119,6 +119,9 @@ class BinSim(object):
         self.log = logging.getLogger("pybinsim.BinSim")
         self.log.info("BinSim: init")
 
+        self.cb_time_usage = np.array(range(0, 50), dtype='float32')
+        self.cpu_usage_update_rate = 100
+
         # Read Configuration File
         self.config = BinSimConfig()
         self.config.read_from_file(config_file)
@@ -226,6 +229,7 @@ def audio_callback(binsim):
         # print("python-sounddevice callback")
 
         cb_start = timeit.default_timer()
+        count = 0
 
         if "debugpy" in sys.modules:
             import debugpy
@@ -272,7 +276,7 @@ def audio_callback(binsim):
                     latereverbfilter = binsim.filterStorage.get_late_reverb_filter(Pose.from_filterValueList(lateReverbValueList))
                     binsim.convolvers[n].setLateReverb(latereverbfilter, callback.config.get('enableCrossfading'))
 
-                left, right = binsim.convolvers[n].process(binsim.block[n, :])
+                left, right, count = binsim.convolvers[n].process(binsim.block[n, :])
 
                 # Sum results from all convolvers
                 if n == 0:
@@ -306,8 +310,10 @@ def audio_callback(binsim):
         cb_end = timeit.default_timer()
         cb_time = cb_end - cb_start
         # binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
-        time_usage = cb_time/(binsim.blockSize/binsim.sampleRate)*100
-        binsim.log.warn(f'Audio callback utilization {time_usage} %')
+        binsim.cb_time_usage[1] = cb_time/(binsim.blockSize/binsim.sampleRate)*100
+        binsim.cb_time_usage = np.roll(binsim.cb_time_usage, 1, axis=0)
+        if count % binsim.cpu_usage_update_rate == 0:
+            binsim.log.info(f'Audio callback utilization Mean: {np.mean(binsim.cb_time_usage)} % - Max: {np.max(binsim.cb_time_usage)}')
 
     callback.config = binsim.config
 

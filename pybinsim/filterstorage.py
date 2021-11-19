@@ -323,7 +323,7 @@ class FilterStorage(object):
         key = pose.create_key()
 
         if key in self.filter_dict:
-            self.log.info("Filter found: key: {}".format(key))
+            #self.log.info("Filter found: key: {}".format(key))
             result_filter = self.filter_dict.get(key)
             if result_filter.filename is not None:
                 self.log.info("   use file:: {}".format(result_filter.filename))
@@ -336,7 +336,7 @@ class FilterStorage(object):
         key = pose.create_key()
         
         if key in self.late_reverb_filter_dict:
-            self.log.info(f'Late Reverb Filter found: key: {key}')
+            #self.log.info(f'Late Reverb Filter found: key: {key}')
             return self.late_reverb_filter_dict.get(key)
         else:
             self.log.warning(f'Late Reverb Filter not found: key: {key}')
