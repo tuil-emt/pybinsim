@@ -34,6 +34,7 @@ from pybinsim.osc_receiver import OscReceiver
 from pybinsim.pose import Pose
 from pybinsim.soundhandler import SoundHandler
 
+import timeit
 
 def parse_boolean(any_value):
 
@@ -223,6 +224,7 @@ def audio_callback(binsim):
     # The python-sounddevice Callback
     def callback(outdata, frame_count, time_info, status):
         # print("python-sounddevice callback")
+        cb_start = timeit.default_timer()
 
         if "debugpy" in sys.modules:
             import debugpy
@@ -297,6 +299,10 @@ def audio_callback(binsim):
         # Report clipping
         if np.max(np.abs(binsim.result)) > 1:
             binsim.log.warn('Clipping occurred: Adjust loudnessFactor!')
+
+        cb_end = timeit.default_timer()
+        cb_time = cb_end - cb_start
+        binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
 
     callback.config = binsim.config
 
