@@ -224,6 +224,7 @@ def audio_callback(binsim):
     # The python-sounddevice Callback
     def callback(outdata, frame_count, time_info, status):
         # print("python-sounddevice callback")
+
         cb_start = timeit.default_timer()
 
         if "debugpy" in sys.modules:
@@ -285,9 +286,11 @@ def audio_callback(binsim):
             if callback.config.get('useHeadphoneFilter'):
                 binsim.result[:, 0], binsim.result[:, 1] = binsim.convolverHP.process(binsim.result)
 
+
         # Scale data
-        binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
-        binsim.result = np.multiply(binsim.result, callback.config.get('loudnessFactor'))
+        # binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
+        binsim.result = np.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels) * 2))
+
 
         outdata[:, 0] = binsim.result[:, 0]
         outdata[:, 1] = binsim.result[:, 1]
@@ -302,7 +305,9 @@ def audio_callback(binsim):
 
         cb_end = timeit.default_timer()
         cb_time = cb_end - cb_start
-        binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
+        # binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
+        time_usage = cb_time/(binsim.blockSize/binsim.sampleRate)*100
+        binsim.log.warn(f'Audio callback utilization {time_usage} %')
 
     callback.config = binsim.config
 

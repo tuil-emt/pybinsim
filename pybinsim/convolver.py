@@ -212,8 +212,7 @@ class ConvolverFFTW(object):
         """
         Build filter from early and late part
 
-        :param filter:
-        :return: transformed filter
+        :return: combined filter
         """
         # Attach late part; Filter will be shorter by one block afterwards
         if self.useSplittedFilters and self.buildNewFilter:
@@ -351,10 +350,10 @@ class ConvolverFFTW(object):
         # transform buffer into freq domain and copy to FDLs
         #self.FDL_left[0:self.block_size + 1] = self.bufferFftPlan(self.buffer)
         #self.FDL_right[0:self.block_size + 1] = self.buffer2FftPlan(self.buffer2)
-        self.FDL_left[0,] = self.bufferFftPlan(self.buffer)
-        self.FDL_right[0,] = self.buffer2FftPlan(self.buffer2)
+        self.FDL_left[0, ] = self.bufferFftPlan(self.buffer)
+        self.FDL_right[0, ] = self.buffer2FftPlan(self.buffer2)
 
-
+    """
     def multiply_and_add(self, IR_block_count, result, input1, input2):
 
         # Discard old data on the beginning of a new sound block
@@ -367,6 +366,7 @@ class ConvolverFFTW(object):
                 IR_block_count * (self.block_size + 1)):((IR_block_count + 1) * (self.block_size + 1))]), result)
 
         return result
+    """
 
     def process(self, block):
         """
@@ -402,11 +402,11 @@ class ConvolverFFTW(object):
         # Rebuild filter
         self.buildFilters()
         
-        # Second: Multiplication with IR block und accumulation with previous data
+        # Second: Multiplication with IR block und accumulation
         self.resultLeftFreq[:] = np.sum(np.multiply(self.TF_left_blocked,self.FDL_left), axis=0)
         self.resultRightFreq[:] = np.sum(np.multiply(self.TF_right_blocked,self.FDL_right), axis=0)
 
-        # Also convolute old filter if interpolation needed and do crossfade
+        # Also convolute old filter if interpolation
         if self.interpolate:
             self.resultLeftFreqPrevious[:] = np.sum(np.multiply(self.TF_left_blocked_previous, self.FDL_left), axis=0)
             self.resultRightFreqPrevious[:] = np.sum(np.multiply(self.TF_right_blocked_previous, self.FDL_right), axis=0)
@@ -417,7 +417,7 @@ class ConvolverFFTW(object):
         self.outputLeft = self.resultLeftIFFTPlan()[self.block_size:self.block_size * 2]
         self.outputRight = self.resultRightIFFTPlan()[self.block_size:self.block_size * 2]
 
-
+        # Crossfade
         if self.interpolate:
             # fade over full block size
             # print('do block interpolation')
