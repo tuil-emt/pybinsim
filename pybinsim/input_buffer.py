@@ -32,59 +32,55 @@ import pyfftw
 nThreads = multiprocessing.cpu_count()
 
 
-class input_buffer(object):
+class InputBuffer(object):
     """
     blubb
     """
 
     def __init__(self, block_size, process_stereo):
-    start = default_timer()
+        start = default_timer()
 
-    self.log = logging.getLogger("pybinsim.input_buffer")
-    self.log.info("Input_buffer: Start Init")
+        self.log = logging.getLogger("pybinsim.input_buffer")
+        self.log.info("Input_buffer: Start Init")
 
-    # pyFFTW Options
-    pyfftw.interfaces.cache.enable()
-    self.fftw_planning_effort = 'FFTW_ESTIMATE'
+        # pyFFTW Options
+        pyfftw.interfaces.cache.enable()
+        self.fftw_planning_effort = 'FFTW_ESTIMATE'
 
-    # Get Basic infos
-    self.block_size = block_size
+        # Get Basic infos
+        self.block_size = block_size
 
-    pn_temporary = Path(__file__).parent.parent / "tmp"
-    fn_wisdom = pn_temporary / "fftw_wisdom.pickle"
-    if pn_temporary.exists() and fn_wisdom.exists():
-        loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
-        pyfftw.import_wisdom(loaded_wisdom)
+        pn_temporary = Path(__file__).parent.parent / "tmp"
+        fn_wisdom = pn_temporary / "fftw_wisdom.pickle"
+        if pn_temporary.exists() and fn_wisdom.exists():
+            loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
+            pyfftw.import_wisdom(loaded_wisdom)
 
-    # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
-    # freq domain regularly
-    self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
-    self.bufferFftPlan = pyfftw.builders.rfft(self.buffer, overwrite_input=True, threads=nThreads,
-                                              planner_effort=self.fftw_planning_effort, avoid_copy=True)
+        # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
+        # freq domain regularly
+        self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
+        self.bufferFftPlan = pyfftw.builders.rfft(self.buffer, overwrite_input=True, threads=nThreads,
+                                                  planner_effort=self.fftw_planning_effort, avoid_copy=True)
 
-    self.buffer2 = pyfftw.zeros_aligned(
-        self.block_size * 2, dtype='float32')
-    self.buffer2FftPlan = pyfftw.builders.rfft(self.buffer2, overwrite_input=True, threads=nThreads,
-                                               planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-
-    self.FDL_left = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
-    self.FDL_right = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.buffer2 = pyfftw.zeros_aligned(
+            self.block_size * 2, dtype='float32')
+        self.buffer2FftPlan = pyfftw.builders.rfft(self.buffer2, overwrite_input=True, threads=nThreads,
+                                                   planner_effort=self.fftw_planning_effort, avoid_copy=True)
 
 
-    # save FFTW plans to recover for next pyBinSim session
-    collected_wisdom = pyfftw.export_wisdom()
-    if not pn_temporary.exists():
-        pn_temporary.mkdir(parents=True)
-    pickle.dump(collected_wisdom, open(fn_wisdom, "wb"))
+        # save FFTW plans to recover for next pyBinSim session
+        collected_wisdom = pyfftw.export_wisdom()
+        if not pn_temporary.exists():
+            pn_temporary.mkdir(parents=True)
+        pickle.dump(collected_wisdom, open(fn_wisdom, "wb"))
 
 
-    # Select mono or stereo processing
-    self.processStereo = process_stereo
+        # Select mono or stereo processing
+        self.processStereo = process_stereo
 
-    end = default_timer()
-    delta = end - start
-    self.log.info("Convolver: Finished Init (took {}s)".format(delta))
+        end = default_timer()
+        delta = end - start
+        self.log.info("Convolver: Finished Init (took {}s)".format(delta))
 
 
 def get_counter(self):

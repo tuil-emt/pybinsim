@@ -69,24 +69,10 @@ class ConvolverFFTW(object):
             loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
             pyfftw.import_wisdom(loaded_wisdom)
 
-        # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
-        # freq domain regularly
-        self.log.info("Convolver: Start Init buffer fft plans")
-        self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
-        self.bufferFftPlan = pyfftw.builders.rfft(self.buffer, overwrite_input=True, threads=nThreads,
-                                                  planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        self.buffer2 = pyfftw.zeros_aligned(
-            self.block_size * 2, dtype='float32')
-        self.buffer2FftPlan = pyfftw.builders.rfft(self.buffer2, overwrite_input=True, threads=nThreads,
-                                                   planner_effort=self.fftw_planning_effort, avoid_copy=True)
 
         # Create arrays for the filters and the FDLs.
         self.log.info("Convolver: Start Init filter fft plans")
-        
-        self.TF_late_left_blocked = np.zeros((self.late_IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_late_right_blocked = np.zeros((self.late_IR_blocks, self.block_size + 1), dtype='complex64')
-        
+
         self.TF_left_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
         self.TF_right_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
         self.TF_left_blocked_previous = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
@@ -134,9 +120,6 @@ class ConvolverFFTW(object):
         # Flag for interpolation of output blocks (result of process())
         self.interpolate = False
         
-        # Flag which initiates filter rebuild (combining early and late part)
-        self.buildNewFilter = False
-
         # Select mono or stereo processing
         self.processStereo = process_stereo
 
@@ -162,8 +145,8 @@ class ConvolverFFTW(object):
         """
 
         left, right = filter.getFilterFD()
-        self.TF_left_blocked[0:self.late_early_transition, :] = left
-        self.TF_right_blocked[0:self.late_early_transition, :] = right
+        self.TF_left_blocked[:] = left
+        self.TF_right_blocked[:] = right
 
         # Interpolation means cross fading the output blocks (linear interpolation)
         self.interpolate = do_interpolation
@@ -181,72 +164,7 @@ class ConvolverFFTW(object):
         """
         self.processCounter += 1
 
-    def fill_buffer_mono(self, block):
-        """
-        Copy mono soundblock to input Buffer;
-        Transform to Freq. Domain and store result in FDLs
-        :param block: Mono sound block
-        :return: None
-        """
-
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            block = np.concatenate(
-                (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
-
-        if self.processCounter == 0:
-            # insert first block to buffer
-            self.buffer[self.block_size:] = block
-
-        else:
-            # shift buffer
-            self.buffer[:self.block_size] = self.buffer[self.block_size:]
-            # insert new block to buffer
-            self.buffer[self.block_size:] = block
-            # shift FDLs
-            self.FDL_left = np.roll(self.FDL_left, 1, axis=0)
-            self.FDL_right = np.roll(self.FDL_right, 1, axis=0)
-
-        # transform buffer into freq domain and copy to FDLs
-        self.FDL_left[0, ] = self.FDL_right[0, ] = self.bufferFftPlan(self.buffer)
-
-
-    def fill_buffer_stereo(self, block):
-        """
-        Copy stereo soundblock to input Buffer1 and Buffer2;
-        Transform to Freq. Domain and store result in FDLs
-
-        :param block:
-        :return: None
-        """
-
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            # print(np.shape(block))
-            block = np.concatenate(
-                (block, np.zeros(((self.block_size - block.size), 2), dtype=np.float32)), 0)
-
-        if self.processCounter == 0:
-            # insert first block to buffer
-            self.buffer[self.block_size:] = block[:, 0]
-            self.buffer2[self.block_size:] = block[:, 1]
-
-        else:
-            # shift buffer
-            self.buffer[:self.block_size] = self.buffer[self.block_size:]
-            self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
-            # insert new block to buffer
-            self.buffer[self.block_size:] = block[:, 0]
-            self.buffer2[self.block_size:] = block[:, 1]
-            # shift FDLs
-            self.FDL_left = np.roll(self.FDL_left, 1, axis=0)
-            self.FDL_right = np.roll(self.FDL_right, 1, axis=0)
-
-        # transform buffer into freq domain and copy to FDLs
-        self.FDL_left[0, ] = self.bufferFftPlan(self.buffer)
-        self.FDL_right[0, ] = self.buffer2FftPlan(self.buffer2)
-
-    def process(self, block):
+    def process(self, input_buffer1, input_buffer2 = 0):
         """
         Main function
 
@@ -254,13 +172,17 @@ class ConvolverFFTW(object):
         :return: (outputLeft, outputRight)
         """
 
-        # First: Fill buffer and FDLs with current block
-        if not self.processStereo:
-            # print('Convolver Mono Processing')
-            self.fill_buffer_mono(block)
+        if self.processCounter > 0:
+            # shift FDLs
+            self.FDL_left = np.roll(self.FDL_left, 1, axis=0)
+            self.FDL_right = np.roll(self.FDL_right, 1, axis=0)
+
+        # transform buffer into freq domain and copy to FDLs
+        if self.processStereo:
+            self.FDL_left[0, ] = input_buffer1
+            self.FDL_right[0, ] = input_buffer2
         else:
-            # print('Convolver Stereo Processing')
-            self.fill_buffer_stereo(block)
+            self.FDL_left[0, ] = self.FDL_right[0, ] = input_buffer1
 
 
         # Save previous filters
