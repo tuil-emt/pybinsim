@@ -112,7 +112,7 @@ class FilterStorage(object):
     """ Class for storing all filters mentioned in the filter list """
 
     #def __init__(self, irSize, block_size, filter_list_name):
-    def __init__(self, irSize, block_size, filter_list_name, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
+    def __init__(self, block_size, filter_list_name, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
 
         self.log = logging.getLogger("pybinsim.FilterStorage")
         self.log.info("FilterStorage: init")
@@ -411,7 +411,7 @@ class FilterStorage(object):
             if filter_size[0] > self.ds_size:
                 self.log.warning('Direct Sound Filter too long: shorten')
                 current_filter = current_filter[:self.ds_size]
-            else:
+            elif filter_size[0] < self.ds_size:
                 self.log.info('Direct Sound Filter too short: zero padding')
                 current_filter = np.concatenate((current_filter, np.zeros(
                     (self.ds_size - filter_size[0], 2), np.float32)), 0)
@@ -419,7 +419,7 @@ class FilterStorage(object):
             if filter_size[0] > self.early_size:
                 self.log.warning('Early Filter too long: shorten')
                 current_filter = current_filter[:self.early_size]
-            else:
+            elif filter_size[0] < self.early_size:
                 self.log.info('Early Filter too short: zero padding')
                 current_filter = np.concatenate((current_filter, np.zeros(
                     (self.early_size - filter_size[0], 2), np.float32)), 0)
@@ -427,9 +427,9 @@ class FilterStorage(object):
             if filter_size[0] > self.late_size:
                 self.log.warning('Late Filter too long: shorten')
                 current_filter = current_filter[:self.late_size]
-            else:
+            elif filter_size[0] < self.late_size:
                 self.log.info('Late Filter too short: zero padding')
                 current_filter = np.concatenate((current_filter, np.zeros(
-                    (self.ds_size - filter_size[0], 2), np.float32)), 0)
+                    (self.late_size - filter_size[0], 2), np.float32)), 0)
 
         return current_filter

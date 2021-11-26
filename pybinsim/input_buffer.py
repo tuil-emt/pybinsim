@@ -78,103 +78,100 @@ class InputBuffer(object):
         # Select mono or stereo processing
         self.processStereo = process_stereo
 
+        self.processCounter = 0
+
         end = default_timer()
         delta = end - start
         self.log.info("Convolver: Finished Init (took {}s)".format(delta))
 
 
-def get_counter(self):
-    """
-    Returns processing counter
-    :return: processing counter
-    """
-    return self.processCounter
+    def get_counter(self):
+        """
+        Returns processing counter
+        :return: processing counter
+        """
+        return self.processCounter
+
+    def process_nothing(self):
+        """
+        Just for testing
+        :return: None
+        """
+        self.processCounter += 1
+
+    def fill_buffer_mono(self, block):
+        """
+        Copy mono soundblock to input Buffer;
+        Transform to Freq. Domain and store result in FDLs
+        :param block: Mono sound block
+        :return: None
+        """
+
+        if block.size < self.block_size:
+            # print('Fill up last block')
+            block = np.concatenate(
+                (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
+
+        if self.processCounter == 0:
+            # insert first block to buffer
+            self.buffer[self.block_size:] = block
+
+        else:
+            # shift buffer
+            self.buffer[:self.block_size] = self.buffer[self.block_size:]
+            # insert new block to buffer
+            self.buffer[self.block_size:] = block
+
+        return self.bufferFftPlan(self.buffer)
+
+    def fill_buffer_stereo(self, block):
+        """
+        Copy stereo soundblock to input Buffer1 and Buffer2;
+        Transform to Freq. Domain and store result in FDLs
+
+        :param block:
+        :return: None
+        """
+
+        if block.size < self.block_size:
+            # print('Fill up last block')
+            # print(np.shape(block))
+            block = np.concatenate(
+                (block, np.zeros(((self.block_size - block.size), 2), dtype=np.float32)), 0)
+
+        if self.processCounter == 0:
+            # insert first block to buffer
+            self.buffer[self.block_size:] = block[:, 0]
+            self.buffer2[self.block_size:] = block[:, 1]
+
+        else:
+            # shift buffer
+            self.buffer[:self.block_size] = self.buffer[self.block_size:]
+            self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
+            # insert new block to buffer
+            self.buffer[self.block_size:] = block[:, 0]
+            self.buffer2[self.block_size:] = block[:, 1]
 
 
-
-def process_nothing(self):
-    """
-    Just for testing
-    :return: None
-    """
-    self.processCounter += 1
+        return self.bufferFftPlan(self.buffer), self.buffer2FftPlan(self.buffer2)
 
 
-def fill_buffer_mono(self, block):
-    """
-    Copy mono soundblock to input Buffer;
-    Transform to Freq. Domain and store result in FDLs
-    :param block: Mono sound block
-    :return: None
-    """
+    def process(self, block):
+        """
+        Main function
 
-    if block.size < self.block_size:
-        # print('Fill up last block')
-        block = np.concatenate(
-            (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
+        :param block:
+        :return: (outputLeft, outputRight)
+        """
 
-    if self.processCounter == 0:
-        # insert first block to buffer
-        self.buffer[self.block_size:] = block
-
-    else:
-        # shift buffer
-        self.buffer[:self.block_size] = self.buffer[self.block_size:]
-        # insert new block to buffer
-        self.buffer[self.block_size:] = block
+        # First: Fill buffer and FDLs with current block
+        if not self.processStereo:
+            # print('Convolver Mono Processing')
+            return self.fill_buffer_mono(block)
+        else:
+            # print('Convolver Stereo Processing')
+            return self.fill_buffer_stereo(block)
 
 
-    return self.bufferFftPlan(self.buffer)
-
-
-def fill_buffer_stereo(self, block):
-    """
-    Copy stereo soundblock to input Buffer1 and Buffer2;
-    Transform to Freq. Domain and store result in FDLs
-
-    :param block:
-    :return: None
-    """
-
-    if block.size < self.block_size:
-        # print('Fill up last block')
-        # print(np.shape(block))
-        block = np.concatenate(
-            (block, np.zeros(((self.block_size - block.size), 2), dtype=np.float32)), 0)
-
-    if self.processCounter == 0:
-        # insert first block to buffer
-        self.buffer[self.block_size:] = block[:, 0]
-        self.buffer2[self.block_size:] = block[:, 1]
-
-    else:
-        # shift buffer
-        self.buffer[:self.block_size] = self.buffer[self.block_size:]
-        self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
-        # insert new block to buffer
-        self.buffer[self.block_size:] = block[:, 0]
-        self.buffer2[self.block_size:] = block[:, 1]
-
-
-    return self.bufferFftPlan(self.buffer), self.buffer2FftPlan(self.buffer2)
-
-
-def process(self, block):
-    """
-    Main function
-
-    :param block:
-    :return: (outputLeft, outputRight)
-    """
-
-    # First: Fill buffer and FDLs with current block
-    if not self.processStereo:
-        # print('Convolver Mono Processing')
-        return self.fill_buffer_mono(block)
-    else:
-        # print('Convolver Stereo Processing')
-       return self.fill_buffer_stereo(block)
-
-
-def close(self):
-    print("Input_buffer: close")
+    def close(self):
+        print("Input_buffer: close")

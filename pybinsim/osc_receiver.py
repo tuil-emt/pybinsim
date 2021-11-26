@@ -88,7 +88,7 @@ class OscReceiver(object):
 
     def select_slice(self, i):
         switcher = {
-            #"/pyBinSim_ds_Filter": slice(0, 9),
+            "/pyBinSim_ds_Filter": slice(0, 9),
             "/pyBinSim_ds_Filter_Short": slice(0, 6),
             "/pyBinSim_ds_Filter_Orientation": slice(0, 3),
             "/pyBinSim_ds_Filter_Position": slice(3, 6),
@@ -223,11 +223,11 @@ class OscReceiver(object):
         """ Check if there is a new filter for channel """
         return self.ds_filters_updated[channel]
 
-    def is_early_filterupdate_necessary(self, channel):
+    def is_early_filter_update_necessary(self, channel):
         """ Check if there is a new late reverb filter for channel """
         return self.early_filters_updated[channel]
 
-    def is_late_filterupdate_necessary(self, channel):
+    def is_late_filter_update_necessary(self, channel):
         """ Check if there is a new late reverb filter for channel """
         return self.late_filters_updated[channel]
 
