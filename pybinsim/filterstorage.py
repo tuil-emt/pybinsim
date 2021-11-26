@@ -104,14 +104,15 @@ class Filter(object):
 
 class FilterType(enum.Enum):
     Undefined = 0
-    Filter = 1
-    LateReverbFilter = 2
+    ds_Filter = 1
+    early_Filter = 2
+    late_Filter = 3
 
 class FilterStorage(object):
     """ Class for storing all filters mentioned in the filter list """
 
     #def __init__(self, irSize, block_size, filter_list_name):
-    def __init__(self, irSize, block_size, filter_list_name, useHeadphoneFilter = False, headphoneFilterSize = 0, useSplittedFilters = False, lateReverbSize = 0):
+    def __init__(self, irSize, block_size, filter_list_name, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
 
         self.log = logging.getLogger("pybinsim.FilterStorage")
         self.log.info("FilterStorage: init")
@@ -119,14 +120,33 @@ class FilterStorage(object):
         pyfftw.interfaces.cache.enable()
         fftw_planning_effort ='FFTW_ESTIMATE'
 
-        self.ir_size = irSize
-        self.ir_blocks = irSize // block_size
+        self.ds_size = ds_filterSize
         self.block_size = block_size
+        self.ds_blocks = self.ds_size // self.block_size
+
+        self.early_size = early_filterSize
+        self.early_blocks = self.early_size // self.block_size
+
+        self.late_size = late_filterSize
+        self.late_blocks = self.late_size // self.block_size
+
         
-        self.filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ir_blocks,self.block_size), dtype='float32'),n=self.block_size*2,axis = 1, threads=nThreads, planner_effort=fftw_planning_effort)
-        
-        self.default_filter = Filter(np.zeros((self.ir_size, 2), dtype='float32'), self.ir_blocks, self.block_size)
-        self.default_filter.storeInFDomain(self.filter_fftw_plan)
+        self.ds_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ds_blocks,self.block_size), dtype='float32'),
+                                                        n=self.block_size*2,axis = 1, threads=nThreads,
+                                                        planner_effort=fftw_planning_effort)
+        self.early_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.early_blocks, self.block_size), dtype='float32'),
+                                                        n=self.block_size * 2, axis=1, threads=nThreads,
+                                                        planner_effort=fftw_planning_effort)
+        self.late_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.late_blocks, self.block_size), dtype='float32'),
+                                                        n=self.block_size * 2, axis=1, threads=nThreads,
+                                                        planner_effort=fftw_planning_effort)
+
+        self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size)
+        self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size)
+        self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size)
+        self.default_ds_filter.storeInFDomain(self.ds_filter_fftw_plan)
+        self.default_early_filter.storeInFDomain(self.early_filter_fftw_plan)
+        self.default_late_filter.storeInFDomain(self.late_filter_fftw_plan)
         
         # Calculate COSINE-Square crossfade windows
         self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
@@ -143,27 +163,15 @@ class FilterStorage(object):
                                                           threads=nThreads, planner_effort=fftw_planning_effort,
                                                           avoid_copy=False)
 
-        self.useSplittedFilters = useSplittedFilters
-        if useSplittedFilters:
-            self.lateReverbSize = lateReverbSize
-            self.late_ir_blocks = lateReverbSize // block_size
-
-            self.late_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.late_ir_blocks, self.block_size), dtype='float32'),
-                                                         n=self.block_size * 2, axis=1, overwrite_input=False,
-                                                         threads=nThreads, planner_effort=fftw_planning_effort,
-                                                         avoid_copy=False)
-
-            self.default_late_reverb_filter = Filter(np.zeros((self.lateReverbSize, 2), dtype='float32'), self.late_ir_blocks, self.block_size)
-            self.default_late_reverb_filter.storeInFDomain(self.late_filter_fftw_plan)
-        
         self.filter_list_path = filter_list_name
         self.filter_list = open(self.filter_list_path, 'r')
 
         self.headphone_filter = None
 
         # format: [key,{filter}]
-        self.filter_dict = {}
-        self.late_reverb_filter_dict = {}
+        self.ds_filter_dict = {}
+        self.early_filter_dict = {}
+        self.late_filter_dict = {}
 
         # Start to load filters
         self.load_filters()
@@ -204,32 +212,20 @@ class FilterStorage(object):
                     self.log.info("Skipping headphone filter: {}".format(filter_path))
                     continue
                 
-
-            #filter_value_list = tuple(line_content[0:-1])
-            #pose = Pose.from_filterValueList(filter_value_list)
-            
-            # handle normal filters and late reverb filters
-            #filter_value_list = tuple(line_content[1:-1])
-            #filter_pose = Pose.from_filterValueList(filter_value_list)
             filter_type = FilterType.Undefined
             
-            if line_content[0].isdigit():
-                filter_type = FilterType.Filter
-                filter_value_list = tuple(line_content[:-1])
-                filter_pose = Pose.from_filterValueList(filter_value_list)
-            elif line.startswith('FILTER'):
-                filter_type = FilterType.Filter
+            if line.startswith('DSFILTER'):
+                filter_type = FilterType.ds_Filter
                 filter_value_list = tuple(line_content[1:-1])
                 filter_pose = Pose.from_filterValueList(filter_value_list)
-            elif line.startswith('LATEREVERB'):
-                if self.useSplittedFilters:
-                    self.log.info("Loading late reverb filter: {}".format(filter_path))
-                    filter_type = FilterType.LateReverbFilter
-                    filter_value_list = tuple(line_content[1:-1])
-                    filter_pose = Pose.from_filterValueList(filter_value_list)
-                else:
-                    self.log.info("Skipping LATEREVERB filter: {}".format(filter_path))
-                    continue
+            elif line.startswith('EARLYFILTER'):
+                filter_type = FilterType.early_Filter
+                filter_value_list = tuple(line_content[1:-1])
+                filter_pose = Pose.from_filterValueList(filter_value_list)
+            elif line.startswith('LATEFILTER'):
+                filter_type = FilterType.late_Filter
+                filter_value_list = tuple(line_content[1:-1])
+                filter_pose = Pose.from_filterValueList(filter_value_list)
             else:
                 filter_type = FilterType.Undefined
                 raise RuntimeError("Filter indentifier wrong or missing")
@@ -283,35 +279,47 @@ class FilterStorage(object):
                 raise FileNotFoundError(f'File {fn_filter} is missing.')
             
             self.log.debug(f'Loading {filter_path}')
-            if filter_type == FilterType.Filter:
+            if filter_type == FilterType.ds_Filter:
                 # preprocess filters and put them in a dict
-                current_filter = Filter(self.load_filter(filter_path, filter_type), self.ir_blocks, self.block_size)
+                current_filter = Filter(self.load_filter(filter_path, filter_type), self.ds_blocks, self.block_size)
                 
                 # apply fade out to all filters
-                current_filter.apply_fadeout(self.crossFadeOut)
-                current_filter.storeInFDomain(self.filter_fftw_plan)
+                # current_filter.apply_fadeout(self.crossFadeOut)
+                current_filter.storeInFDomain(self.ds_filter_fftw_plan)
                 
                 # create key and store in dict
                 key = filter_pose.create_key()
-                self.filter_dict.update({key: current_filter})
+                self.ds_filter_dict.update({key: current_filter})
             
-            if filter_type == FilterType.LateReverbFilter:
+            if filter_type == FilterType.early_Filter:
                 # preprocess late reverb filters and put them in a separate dict
-                current_filter = Filter(self.load_filter(filter_path, filter_type), self.late_ir_blocks, self.block_size)
+                current_filter = Filter(self.load_filter(filter_path, filter_type), self.early_blocks, self.block_size)
                 
                 # apply fade in to all late reverb filters
-                current_filter.apply_fadein(self.crossFadeIn)
-                current_filter.storeInFDomain(self.late_filter_fftw_plan)
+                # current_filter.apply_fadein(self.crossFadeIn)
+                current_filter.storeInFDomain(self.early_filter_fftw_plan)
                 
                 #create key and store in dict
                 key = filter_pose.create_key()
-                self.late_reverb_filter_dict.update({key: current_filter})
+                self.early_filter_dict.update({key: current_filter})
+
+            if filter_type == FilterType.late_Filter:
+                # preprocess late reverb filters and put them in a separate dict
+                current_filter = Filter(self.load_filter(filter_path, filter_type), self.late_blocks, self.block_size)
+
+                # apply fade in to all late reverb filters
+                # current_filter.apply_fadein(self.crossFadeIn)
+                current_filter.storeInFDomain(self.late_filter_fftw_plan)
+
+                # create key and store in dict
+                key = filter_pose.create_key()
+                self.late_filter_dict.update({key: current_filter})
         
         end = time.time()
         self.log.info("Finished loading filters in" + str(end-start) + "sec.")
         #self.log.info("filter_dict size: {}MiB".format(total_size(self.filter_dict) // 1024 // 1024))
 
-    def get_filter(self, pose):
+    def get_ds_filter(self, pose):
         """
         Searches in the dict if key is available and return corresponding filter
         When no filter is found, defaultFilter is returned which results in silence
@@ -322,25 +330,57 @@ class FilterStorage(object):
 
         key = pose.create_key()
 
-        if key in self.filter_dict:
+        if key in self.ds_filter_dict:
             #self.log.info("Filter found: key: {}".format(key))
-            result_filter = self.filter_dict.get(key)
+            result_filter = self.ds_filter_dict.get(key)
             if result_filter.filename is not None:
                 self.log.info("   use file:: {}".format(result_filter.filename))
             return result_filter
         else:
             self.log.warning('Filter not found: key: {}'.format(key))
-            return self.default_filter
+            return self.default_ds_filter
 
-    def get_late_reverb_filter(self, pose):
+    def get_early_filter(self, pose):
+        """
+        Searches in the dict if key is available and return corresponding filter
+        When no filter is found, defaultFilter is returned which results in silence
+
+        :param pose
+        :return: corresponding filter for pose
+        """
+
         key = pose.create_key()
-        
-        if key in self.late_reverb_filter_dict:
-            #self.log.info(f'Late Reverb Filter found: key: {key}')
-            return self.late_reverb_filter_dict.get(key)
+
+        if key in self.early_filter_dict:
+            #self.log.info("Filter found: key: {}".format(key))
+            result_filter = self.early_filter_dict.get(key)
+            if result_filter.filename is not None:
+                self.log.info("   use file:: {}".format(result_filter.filename))
+            return result_filter
         else:
-            self.log.warning(f'Late Reverb Filter not found: key: {key}')
-            return self.default_late_reverb_filter
+            self.log.warning('Filter not found: key: {}'.format(key))
+            return self.default_early_filter
+
+    def get_late_filter(self, pose):
+        """
+        Searches in the dict if key is available and return corresponding filter
+        When no filter is found, defaultFilter is returned which results in silence
+
+        :param pose
+        :return: corresponding filter for pose
+        """
+
+        key = pose.create_key()
+
+        if key in self.late_filter_dict:
+            #self.log.info("Filter found: key: {}".format(key))
+            result_filter = self.late_filter_dict.get(key)
+            if result_filter.filename is not None:
+                self.log.info("   use file:: {}".format(result_filter.filename))
+            return result_filter
+        else:
+            self.log.warning('Filter not found: key: {}'.format(key))
+            return self.default_late_filter
 
     def close(self):
         self.log.info('FilterStorage: close()')
@@ -358,20 +398,26 @@ class FilterStorage(object):
 
         filter_size = np.shape(current_filter)
 
+        """
         if not self.useSplittedFilters:
             # Fill filter with zeros if to short; only needed in non-split case
             if filter_size[0] < self.ir_size:
                 self.log.warning('Filter too short: Fill up with zeros')
                 current_filter = np.concatenate((current_filter, np.zeros(
                     (self.ir_size - filter_size[0], 2), np.float32)), 0)
+        """
         
-        if (filter_type == FilterType.Filter):
-            if filter_size[0] > self.ir_size:
-                self.log.warning('Filter too long: shorten')
-                current_filter = current_filter[:self.ir_size]
-        elif (filter_type == FilterType.LateReverbFilter):
-            if filter_size[0] > self.lateReverbSize:
-                self.log.warning('Reverb Filter too long: shorten')
-                current_filter = current_filter[:self.lateReverbSize]
+        if (filter_type == FilterType.ds_Filter):
+            if filter_size[0] > self.ds_size:
+                self.log.warning('Direct Sound Filter too long: shorten')
+                current_filter = current_filter[:self.ds_size]
+        elif (filter_type == FilterType.early_Filter):
+            if filter_size[0] > self.early_size:
+                self.log.warning('Early Filter too long: shorten')
+                current_filter = current_filter[:self.early_size]
+        elif (filter_type == FilterType.late_Filter):
+            if filter_size[0] > self.late_size:
+                self.log.warning('Late Filter too long: shorten')
+                current_filter = current_filter[:self.late_size]
 
         return current_filter
