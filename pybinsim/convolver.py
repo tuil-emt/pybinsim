@@ -172,6 +172,7 @@ class ConvolverFFTW(object):
         :return: (outputLeft, outputRight)
         """
 
+        # Fill FDL's with need data from input buffer(s)
         if self.processCounter > 0:
             # shift FDLs
             self.FDL_left = np.roll(self.FDL_left, 1, axis=0)

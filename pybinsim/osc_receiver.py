@@ -46,35 +46,39 @@ class OscReceiver(object):
         self.currentConfig = current_config
 
         # Default values; Stores filter keys for all channles/convolvers
-        self.filters_updated = [True] * self.maxChannels
-        self.late_reverb_filters_updated = [True] * self.maxChannels
+        self.ds_filters_updated = [True] * self.maxChannels
+        self.early_filters_updated = [True] * self.maxChannels
+        self.late_filters_updated = [True] * self.maxChannels
         
         self.default_filter_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
-        self.valueList_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
 
-        self.default_late_reverb_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
-        self.valueList_late_reverb = np.tile(self.default_late_reverb_value, [self.maxChannels, 1])
+        self.valueList_ds_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
+        self.valueList_early_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
+        self.valueList_late_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
 
-#        self.defaultValue = (0, 0, 0, 0, 0, 0, 0, 0, 0)
-#        self.valueList = [self.defaultValue] * self.maxChannels
 
         # self.valueList = [()] * self.maxChannels
         self.soundFileList = ''
         self.soundFileNew = False
 
         osc_dispatcher = dispatcher.Dispatcher()
-        osc_dispatcher.map("/pyBinSim", self.handle_filter_input)
+        # osc_dispatcher.map("/pyBinSim", self.handle_filter_input)
         osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
-        osc_dispatcher.map("/pyBinSimFilter", self.handle_filter_input)
-        osc_dispatcher.map("/pyBinSimFilterShort", self.handle_filter_input)
-        osc_dispatcher.map("/pyBinSimFilterOrientation", self.handle_filter_input)
-        osc_dispatcher.map("/pyBinSimFilterPosition", self.handle_filter_input)
-        osc_dispatcher.map("/pyBinSimFilterCustom", self.handle_filter_input)
-        osc_dispatcher.map("/pyBinSimLateReverbFilter", self.handle_late_reverb_input)
-        osc_dispatcher.map("/pyBinSimLateReverbFilterShort", self.handle_late_reverb_input)
-        osc_dispatcher.map("/pyBinSimLateReverbFilterOrientation", self.handle_late_reverb_input)
-        osc_dispatcher.map("/pyBinSimLateReverbFilterPosition", self.handle_late_reverb_input)
-        osc_dispatcher.map("/pyBinSimLateReverbFilterCustom", self.handle_late_reverb_input)
+        osc_dispatcher.map("/pyBinSim_ds_Filter", self.handle_ds_filter_input)
+        osc_dispatcher.map("/pyBinSim_ds_Filter_Short", self.handle_ds_filter_input)
+        osc_dispatcher.map("/pyBinSim_ds_Filter_Orientation", self.handle_ds_filter_input)
+        osc_dispatcher.map("/pyBinSim_ds_Filter_Position", self.handle_ds_filter_input)
+        osc_dispatcher.map("/pyBinSim_ds_Filter_Custom", self.handle_ds_filter_input)
+        osc_dispatcher.map("/pyBinSim_early_Filter", self.handle_early_filter_input)
+        osc_dispatcher.map("/pyBinSim_early_Filter_Short", self.handle_early_filter_input)
+        osc_dispatcher.map("/pyBinSim_early_Filter_Orientation", self.handle_early_filter_input)
+        osc_dispatcher.map("/pyBinSim_early_Filter_Position", self.handle_early_filter_input)
+        osc_dispatcher.map("/pyBinSim_early_Filter_Custom", self.handle_early_filter_input)
+        osc_dispatcher.map("/pyBinSim_late_Filter", self.handle_late_filter_input)
+        osc_dispatcher.map("/pyBinSim_late_Filter_Short", self.handle_late_filter_input)
+        osc_dispatcher.map("/pyBinSim_late_Filter_Orientation", self.handle_late_filter_input)
+        osc_dispatcher.map("/pyBinSim_late_Filter_Position", self.handle_late_filter_input)
+        osc_dispatcher.map("/pyBinSim_late_Filter_Custom", self.handle_late_filter_input)
         osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
         osc_dispatcher.map("/pyBinSimPauseAudioPlayback", self.handle_audio_pause)
         osc_dispatcher.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
@@ -84,20 +88,25 @@ class OscReceiver(object):
 
     def select_slice(self, i):
         switcher = {
-            "/pyBinSimFilter": slice(0, 9),
-            "/pyBinSimFilterShort": slice(0, 6),
-            "/pyBinSimFilterOrientation": slice(0, 3),
-            "/pyBinSimFilterPosition": slice(3, 6),
-            "/pyBinSimFilterCustom": slice(6, 9),
-            "/pyBinSimLateReverbFilter": slice(0, 9),
-            "/pyBinSimLateReverbFilterShort": slice(0, 6),
-            "/pyBinSimLateReverbFilterOrientation": slice(0, 3),
-            "/pyBinSimLateReverbFilterPosition": slice(3, 6),
-            "/pyBinSimLateReverbFilterCustom": slice(6, 9)
+            #"/pyBinSim_ds_Filter": slice(0, 9),
+            "/pyBinSim_ds_Filter_Short": slice(0, 6),
+            "/pyBinSim_ds_Filter_Orientation": slice(0, 3),
+            "/pyBinSim_ds_Filter_Position": slice(3, 6),
+            "/pyBinSim_ds_Filter_Custom": slice(6, 9),
+            "/pyBinSim_early_Filter": slice(0, 9),
+            "/pyBinSim_early_Filter_Short": slice(0, 6),
+            "/pyBinSim_early_Filter_Orientation": slice(0, 3),
+            "/pyBinSim_early_Filter_Position": slice(3, 6),
+            "/pyBinSim_early_Filter_Custom": slice(6, 9),
+            "/pyBinSim_late_Filter": slice(0, 9),
+            "/pyBinSim_late_Filter_Short": slice(0, 6),
+            "/pyBinSim_late_Filter_Orientation": slice(0, 3),
+            "/pyBinSim_late_Filter_Position": slice(3, 6),
+            "/pyBinSim_late_Filter_Custom": slice(6, 9)
         }
         return switcher.get(i, [])
 
-    def handle_filter_input(self, identifier, channel, *args):
+    def handle_ds_filter_input(self, identifier, channel, *args):
         """
         Handler for tracking information
 
@@ -113,20 +122,20 @@ class OscReceiver(object):
         current_channel = channel
         key_slice = self.select_slice(identifier)
 
-        if len(args) == len(self.valueList_filter[current_channel, key_slice]):
-            if all(args == self.valueList_filter[current_channel, key_slice]):
+        if len(args) == len(self.valueList_ds_filter[current_channel, key_slice]):
+            if all(args == self.valueList_ds_filter[current_channel, key_slice]):
                 #self.log.warning("Same filter as before")
                 pass
             else:
-                self.filters_updated[current_channel] = True
-                self.valueList_filter[current_channel, key_slice] = args
+                self.ds_filters_updated[current_channel] = True
+                self.valueList_ds_filter[current_channel, key_slice] = args
         else:
             self.log.warning("OSC identifier and key mismatch")
             
         #self.log.info("Channel: {}".format(str(channel)))
         #self.log.info("Current Filter List: {}".format(str(self.valueList_filter[current_channel, :])))
 
-    def handle_late_reverb_input(self, identifier, channel, *args):
+    def handle_early_filter_input(self, identifier, channel, *args):
         """
         Handler for tracking information
 
@@ -138,14 +147,40 @@ class OscReceiver(object):
         current_channel = channel
         key_slice = self.select_slice(identifier)
 
-        if len(args) == len(self.valueList_late_reverb[current_channel, key_slice]):
+        if len(args) == len(self.valueList_early_filter[current_channel, key_slice]):
 
-            if all(args == self.valueList_late_reverb[current_channel, key_slice]):
+            if all(args == self.valueList_early_filter[current_channel, key_slice]):
                 #self.log.warning("Same late reverb filter as before")
                 pass
             else:
-                self.late_reverb_filters_updated[current_channel] = True
-                self.valueList_late_reverb[current_channel, key_slice] = args
+                self.early_filters_updated[current_channel] = True
+                self.valueList_early_filter[current_channel, key_slice] = args
+        else:
+            self.log.warning('OSC identifier and key mismatch')
+
+        #self.log.info("Channel: {}".format(str(channel)))
+        #self.log.info("Current Late Reverb Filter List: {}".format(str(self.valueList_late_reverb[current_channel, :])))
+
+    def handle_late_filter_input(self, identifier, channel, *args):
+        """
+        Handler for tracking information
+
+        :param identifier:
+        :param channel:
+        :param args:
+        :return:
+        """
+        current_channel = channel
+        key_slice = self.select_slice(identifier)
+
+        if len(args) == len(self.valueList_late_filter[current_channel, key_slice]):
+
+            if all(args == self.valueList_late_filter[current_channel, key_slice]):
+                #self.log.warning("Same late reverb filter as before")
+                pass
+            else:
+                self.late_filters_updated[current_channel] = True
+                self.valueList_late_filter[current_channel, key_slice] = args
         else:
             self.log.warning('OSC identifier and key mismatch')
 
@@ -184,31 +219,37 @@ class OscReceiver(object):
         osc_thread.daemon = True
         osc_thread.start()
 
-    def is_filter_update_necessary(self, channel):
+    def is_ds_filter_update_necessary(self, channel):
         """ Check if there is a new filter for channel """
-        return self.filters_updated[channel]
-    
-    def is_late_reverb_update_necessary(self, channel):
+        return self.ds_filters_updated[channel]
+
+    def is_early_filterupdate_necessary(self, channel):
         """ Check if there is a new late reverb filter for channel """
-        if self.currentConfig.get('useSplittedFilters'):
-            return self.late_reverb_filters_updated[channel]
-        else:
-            return False
+        return self.early_filters_updated[channel]
+
+    def is_late_filterupdate_necessary(self, channel):
+        """ Check if there is a new late reverb filter for channel """
+        return self.late_filters_updated[channel]
 
     #def get_current_values(self, channel):
     #    """ Return key for filter """
     #    self.filters_updated[channel] = False
     #    return self.valueList[channel]
     
-    def get_current_filter_values(self, channel):
+    def get_current_ds_filter_values(self, channel):
         """ Return key for filter """
-        self.filters_updated[channel] = False
-        return self.valueList_filter[channel,:]
+        self.ds_filters_updated[channel] = False
+        return self.valueList_ds_filter[channel,:]
 
-    def get_current_late_reverb_values(self, channel):
+    def get_current_early_filter_values(self, channel):
         """ Return key for late reverb filters """
-        self.late_reverb_filters_updated[channel] = False
-        return self.valueList_late_reverb[channel,:]
+        self.early_filters_updated[channel] = False
+        return self.valueList_early_filter[channel,:]
+
+    def get_current_late_filter_values(self, channel):
+        """ Return key for late reverb filters """
+        self.late_filters_updated[channel] = False
+        return self.valueList_late_filter[channel,:]
     
     def get_current_config(self):
         return self.currentConfig

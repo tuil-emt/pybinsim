@@ -33,6 +33,7 @@ from pybinsim.filterstorage import FilterStorage
 from pybinsim.osc_receiver import OscReceiver
 from pybinsim.pose import Pose
 from pybinsim.soundhandler import SoundHandler
+from pybinsim.input_buffer import InputBuffer
 
 import timeit
 
@@ -58,17 +59,17 @@ class BinSimConfig(object):
         # Default Configuration
         self.configurationDict = {'soundfile': '',
                                   'blockSize': 256,
-                                  'filterSize': 16384,
+                                  'ds_filterSize': 512,
+                                  'early_filterSize': 4096,
+                                  'late_filterSize': 16384,
                                   'filterList': 'brirs/filter_list_kemar5.txt',
                                   'enableCrossfading': False,
                                   'useHeadphoneFilter': False,
-                                  'headphoneFilterSize': 16384,
+                                  'headphone_filterSize': 4096,
                                   'loudnessFactor': float(1),
                                   'maxChannels': 8,
-                                  'samplingRate': 44100,
+                                  'samplingRate': 48000,
                                   'loopSound': True,
-                                  'useSplittedFilters': False,
-                                  'lateReverbSize': 16384,
                                   'pauseConvolution': False,
                                   'pauseAudioPlayback': False}
 
@@ -135,7 +136,9 @@ class BinSim(object):
         self.stream = None
 
         self.convolverWorkers = []
-        self.convolverHP, self.convolvers, self.filterStorage, self.oscReceiver, self.soundHandler = self.initialize_pybinsim()
+        self.convolverHP, self.ds_convolvers, self.early_convolvers, self.late_convolvers, self.input_BufferMono,\
+        self.input_BufferStereo, self.filterStorage,  self.oscReceiver, self.soundHandler = self.initialize_pybinsim()
+
 
     def __enter__(self):
         return self
@@ -169,13 +172,13 @@ class BinSim(object):
             [self.nChannels, self.blockSize], dtype=np.float32)
 
         # Create FilterStorage
-        filterStorage = FilterStorage(self.config.get('filterSize'),
+        filterStorage = FilterStorage(self.config.get('ds_filterSize'),
                                       self.blockSize,
                                       self.config.get('filterList'),
                                       self.config.get('useHeadphoneFilter'),
-                                      self.config.get('headphoneFilterSize'),
-                                      self.config.get('useSplittedFilters'),
-                                      self.config.get('lateReverbSize'))
+                                      self.config.get('headphone_filterSize'),
+                                      self.config.get('early_filterSize'),
+                                      self.config.get('late_filterSize'))
 
         # Start an oscReceiver
         oscReceiver = OscReceiver(self.config)
@@ -189,22 +192,34 @@ class BinSim(object):
         soundfile_list = self.config.get('soundfile')
         soundHandler.request_new_sound_file(soundfile_list)
 
+        # Create input buffers
+        input_BufferMono = InputBuffer(self.blockSize,  False)
+        input_BufferStereo = InputBuffer(self.blockSize,  True)
+
+
         # Create N convolvers depending on the number of wav channels
         self.log.info('Number of Channels: ' + str(self.nChannels))
-        convolvers = [None] * self.nChannels
+        ds_convolvers = [None] * self.nChannels
+        early_convolvers = [None] * self.nChannels
+        late_convolvers = [None] * self.nChannels
         for n in range(self.nChannels):
-            convolvers[n] = ConvolverFFTW(self.config.get(
-                'filterSize'), self.blockSize, False, self.config.get('useSplittedFilters'), self.config.get('lateReverbSize'))
+            ds_convolvers[n] = ConvolverFFTW(self.config.get(
+                'ds_filterSize'), self.blockSize, False)
+            early_convolvers[n] = ConvolverFFTW(self.config.get(
+                'early_filterSize'), self.blockSize, False)
+            late_convolvers[n] = ConvolverFFTW(self.config.get(
+                'late_filterSize'), self.blockSize, False)
 
         # HP Equalization convolver
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
             convolverHP = ConvolverFFTW(self.config.get(
-                'headphoneFilterSize'), self.blockSize, True)
+                'headphone_filterSize'), self.blockSize, True)
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setIR(hpfilter, False)
 
-        return convolverHP, convolvers, filterStorage, oscReceiver, soundHandler
+        return convolverHP, ds_convolvers, early_convolvers, late_convolvers, input_BufferMono, input_BufferStereo, \
+               filterStorage, oscReceiver, soundHandler
 
     def __cleanup(self):
         # Close everything when BinSim is finished
@@ -213,7 +228,9 @@ class BinSim(object):
         self.filterStorage.close()
 
         for n in range(self.nChannels):
-            self.convolvers[n].close()
+            self.ds_convolvers[n].close()
+            self.early_convolvers[n].close()
+            self.late_convolvers[n].close()
 
         if self.config.get('useHeadphoneFilter'):
             if self.convolverHP:
@@ -265,18 +282,30 @@ def audio_callback(binsim):
             for n in range(amount_channels):
 
                 # Get new Filter
-                if binsim.oscReceiver.is_filter_update_necessary(n):
-                    filterValueList = binsim.oscReceiver.get_current_filter_values(n)
-                    filter = binsim.filterStorage.get_filter(Pose.from_filterValueList(filterValueList))
-                    binsim.convolvers[n].setIR(filter, callback.config.get('enableCrossfading'))
-                    
-                # Get new late reverb Filter
-                if binsim.oscReceiver.is_late_reverb_update_necessary(n):
-                    lateReverbValueList = binsim.oscReceiver.get_current_late_reverb_values(n)
-                    latereverbfilter = binsim.filterStorage.get_late_reverb_filter(Pose.from_filterValueList(lateReverbValueList))
-                    binsim.convolvers[n].setLateReverb(latereverbfilter, callback.config.get('enableCrossfading'))
+                if binsim.oscReceiver.is_ds_filter_update_necessary(n):
+                    ds_filterValueList = binsim.oscReceiver.get_current_ds_filter_values(n)
+                    ds_filter = binsim.filterStorage.get_ds_filter(Pose.from_filterValueList(ds_filterValueList))
+                    binsim.ds_convolvers[n].setIR(ds_filter, callback.config.get('enableCrossfading'))
 
-                left, right, count = binsim.convolvers[n].process(binsim.block[n, :])
+                # Get new late reverb Filter
+                if binsim.oscReceiver.is_early_filter_update_necessary(n):
+                    early_filterValueList = binsim.oscReceiver.get_current_early_filter_values(n)
+                    early_filter = binsim.filterStorage.get_early_filter(Pose.from_filterValueList(early_filterValueList))
+                    binsim.early_convolvers[n].setIR(early_filter, callback.config.get('enableCrossfading'))
+
+                # Get new late reverb Filter
+                if binsim.oscReceiver.is_late_filter_update_necessary(n):
+                    late_filterValueList = binsim.oscReceiver.get_current_late_filter_values(n)
+                    late_filter = binsim.filterStorage.get_late_filter(Pose.from_filterValueList(late_filterValueList))
+                    binsim.late_convolvers[n].setIR(late_filter, callback.config.get('enableCrossfading'))
+
+                input_mono = binsim.mono_inputBuffer(binsim.block[n, :])
+                left_ds, right_ds, count = binsim.ds_convolvers[n].process(input_mono)
+                left_early, right_early, _ = binsim.early_convolvers[n].process(input_mono)
+                left_late, right_late, _ = binsim.late_convolvers[n].process(input_mono)
+
+                left = left_ds + left_early + left_late
+                right = right_ds + right_early + right_late
 
                 # Sum results from all convolvers
                 if n == 0:
@@ -288,7 +317,8 @@ def audio_callback(binsim):
 
             # Finally apply Headphone Filter
             if callback.config.get('useHeadphoneFilter'):
-                binsim.result[:, 0], binsim.result[:, 1] = binsim.convolverHP.process(binsim.result)
+                binsim.result[:, 0], binsim.result[:, 1] = \
+                    binsim.convolverHP.process(binsim.mono_inputBuffer(binsim.result))
 
 
         # Scale data
