@@ -411,13 +411,25 @@ class FilterStorage(object):
             if filter_size[0] > self.ds_size:
                 self.log.warning('Direct Sound Filter too long: shorten')
                 current_filter = current_filter[:self.ds_size]
+            else:
+                self.log.info('Direct Sound Filter too short: zero padding')
+                current_filter = np.concatenate((current_filter, np.zeros(
+                    (self.ds_size - filter_size[0], 2), np.float32)), 0)
         elif (filter_type == FilterType.early_Filter):
             if filter_size[0] > self.early_size:
                 self.log.warning('Early Filter too long: shorten')
                 current_filter = current_filter[:self.early_size]
+            else:
+                self.log.info('Early Filter too short: zero padding')
+                current_filter = np.concatenate((current_filter, np.zeros(
+                    (self.early_size - filter_size[0], 2), np.float32)), 0)
         elif (filter_type == FilterType.late_Filter):
             if filter_size[0] > self.late_size:
                 self.log.warning('Late Filter too long: shorten')
                 current_filter = current_filter[:self.late_size]
+            else:
+                self.log.info('Late Filter too short: zero padding')
+                current_filter = np.concatenate((current_filter, np.zeros(
+                    (self.ds_size - filter_size[0], 2), np.float32)), 0)
 
         return current_filter
