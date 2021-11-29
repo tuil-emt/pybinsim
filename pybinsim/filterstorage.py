@@ -107,6 +107,7 @@ class FilterType(enum.Enum):
     ds_Filter = 1
     early_Filter = 2
     late_Filter = 3
+    headphone_Filter = 4
 
 class FilterStorage(object):
     """ Class for storing all filters mentioned in the filter list """
@@ -124,6 +125,11 @@ class FilterStorage(object):
         self.block_size = block_size
         self.ds_blocks = self.ds_size // self.block_size
 
+        #if self.ds_blocks == 0:
+        #    self.ds_blocks = 1
+        #    self.ds_size = self.block_size
+            # hacky, but what to do?
+
         self.early_size = early_filterSize
         self.early_blocks = self.early_size // self.block_size
 
@@ -131,8 +137,8 @@ class FilterStorage(object):
         self.late_blocks = self.late_size // self.block_size
 
         
-        self.ds_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ds_blocks,self.block_size), dtype='float32'),
-                                                        n=self.block_size*2,axis = 1, threads=nThreads,
+        self.ds_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ds_blocks, self.block_size), dtype='float32'),
+                                                        n=self.block_size * 2,axis=1, threads=nThreads,
                                                         planner_effort=fftw_planning_effort)
         self.early_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.early_blocks, self.block_size), dtype='float32'),
                                                         n=self.block_size * 2, axis=1, threads=nThreads,
@@ -141,7 +147,12 @@ class FilterStorage(object):
                                                         n=self.block_size * 2, axis=1, threads=nThreads,
                                                         planner_effort=fftw_planning_effort)
 
+        #test = np.zeros((self.ds_size, 2), dtype='float32')
+        #test[0, 0] = 1
+        #test[0, 1] = 1
         self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size)
+        #self.default_ds_filter = Filter(test, self.ds_blocks, self.block_size)
+
         self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size)
         self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size)
         self.default_ds_filter.storeInFDomain(self.ds_filter_fftw_plan)
@@ -204,7 +215,7 @@ class FilterStorage(object):
             if line.startswith('HPFILTER'):
                 if self.useHeadphoneFilter:
                     self.log.info("Loading headphone filter: {}".format(filter_path))
-                    self.headphone_filter = Filter(self.load_filter(filter_path, FilterType.Filter), self.headphone_ir_blocks, self.block_size)
+                    self.headphone_filter = Filter(self.load_filter(filter_path, FilterType.headphone_Filter), self.headphone_ir_blocks, self.block_size)
                     self.headphone_filter.storeInFDomain(self.hp_filter_fftw_plan)
                     continue
                 else:
@@ -398,15 +409,6 @@ class FilterStorage(object):
 
         filter_size = np.shape(current_filter)
 
-        """
-        if not self.useSplittedFilters:
-            # Fill filter with zeros if to short; only needed in non-split case
-            if filter_size[0] < self.ir_size:
-                self.log.warning('Filter too short: Fill up with zeros')
-                current_filter = np.concatenate((current_filter, np.zeros(
-                    (self.ir_size - filter_size[0], 2), np.float32)), 0)
-        """
-        
         if (filter_type == FilterType.ds_Filter):
             if filter_size[0] > self.ds_size:
                 self.log.warning('Direct Sound Filter too long: shorten')
@@ -429,6 +431,14 @@ class FilterStorage(object):
                 current_filter = current_filter[:self.late_size]
             elif filter_size[0] < self.late_size:
                 self.log.info('Late Filter too short: zero padding')
+                current_filter = np.concatenate((current_filter, np.zeros(
+                    (self.late_size - filter_size[0], 2), np.float32)), 0)
+        elif (filter_type == FilterType.headphone_Filter):
+            if filter_size[0] > self.late_size:
+                self.log.warning('Headphone Filter too long: shorten')
+                current_filter = current_filter[:self.late_size]
+        elif filter_size[0] < self.late_size:
+                self.log.info('Headphone Filter too short: zero padding')
                 current_filter = np.concatenate((current_filter, np.zeros(
                     (self.late_size - filter_size[0], 2), np.float32)), 0)
 

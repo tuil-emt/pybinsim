@@ -134,17 +134,17 @@ class ConvolverFFTW(object):
         """
         return self.processCounter
 
-    def setIR(self, filter, do_interpolation):
+    def setIR(self, current_filter, do_interpolation):
         """
         Hand over a new set of filters to the convolver
         and define if you want to perform an interpolation/crossfade
 
-        :param filter:
+        :param current_filter:
         :param do_interpolation:
         :return: None
         """
 
-        left, right = filter.getFilterFD()
+        left, right = current_filter.getFilterFD()
         self.TF_left_blocked[:] = left
         self.TF_right_blocked[:] = right
 
@@ -190,8 +190,8 @@ class ConvolverFFTW(object):
         self.saveOldFilters()
 
         # Second: Multiplication with IR block und accumulation
-        self.resultLeftFreq[:] = np.sum(np.multiply(self.TF_left_blocked,self.FDL_left), axis=0)
-        self.resultRightFreq[:] = np.sum(np.multiply(self.TF_right_blocked,self.FDL_right), axis=0)
+        self.resultLeftFreq[:] = np.sum(np.multiply(self.TF_left_blocked, self.FDL_left), axis=0)
+        self.resultRightFreq[:] = np.sum(np.multiply(self.TF_right_blocked, self.FDL_right), axis=0)
 
 
         # Third: Transformation back to time domain

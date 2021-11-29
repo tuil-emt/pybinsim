@@ -152,9 +152,7 @@ class InputBuffer(object):
             self.buffer[self.block_size:] = block[:, 0]
             self.buffer2[self.block_size:] = block[:, 1]
 
-
         return self.bufferFftPlan(self.buffer), self.buffer2FftPlan(self.buffer2)
-
 
     def process(self, block):
         """
