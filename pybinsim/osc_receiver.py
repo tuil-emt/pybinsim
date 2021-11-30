@@ -124,8 +124,7 @@ class OscReceiver(object):
 
         if len(args) == len(self.valueList_ds_filter[current_channel, key_slice]):
             if all(args == self.valueList_ds_filter[current_channel, key_slice]):
-                #self.log.warning("Same filter as before")
-                pass
+                self.log.debug("Same direct sound filter as before")
             else:
                 self.ds_filters_updated[current_channel] = True
                 self.valueList_ds_filter[current_channel, key_slice] = args
@@ -150,8 +149,7 @@ class OscReceiver(object):
         if len(args) == len(self.valueList_early_filter[current_channel, key_slice]):
 
             if all(args == self.valueList_early_filter[current_channel, key_slice]):
-                #self.log.warning("Same late reverb filter as before")
-                pass
+                self.log.debug("Same early filter as before")
             else:
                 self.early_filters_updated[current_channel] = True
                 self.valueList_early_filter[current_channel, key_slice] = args
@@ -176,8 +174,7 @@ class OscReceiver(object):
         if len(args) == len(self.valueList_late_filter[current_channel, key_slice]):
 
             if all(args == self.valueList_late_filter[current_channel, key_slice]):
-                #self.log.warning("Same late reverb filter as before")
-                pass
+                self.log.debug("Same late  filter as before")
             else:
                 self.late_filters_updated[current_channel] = True
                 self.valueList_late_filter[current_channel, key_slice] = args
@@ -239,17 +236,17 @@ class OscReceiver(object):
     def get_current_ds_filter_values(self, channel):
         """ Return key for filter """
         self.ds_filters_updated[channel] = False
-        return self.valueList_ds_filter[channel,:]
+        return self.valueList_ds_filter[channel, :]
 
     def get_current_early_filter_values(self, channel):
         """ Return key for late reverb filters """
         self.early_filters_updated[channel] = False
-        return self.valueList_early_filter[channel,:]
+        return self.valueList_early_filter[channel, :]
 
     def get_current_late_filter_values(self, channel):
         """ Return key for late reverb filters """
         self.late_filters_updated[channel] = False
-        return self.valueList_late_filter[channel,:]
+        return self.valueList_late_filter[channel, :]
     
     def get_current_config(self):
         return self.currentConfig

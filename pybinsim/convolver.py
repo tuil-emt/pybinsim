@@ -96,7 +96,7 @@ class ConvolverFFTW(object):
                                                          overwrite_input=True, threads=nThreads,
                                                          planner_effort=self.fftw_planning_effort, avoid_copy=True)
 
-        self.log.info("Convolver: Start Init result prvieous fft plans")
+        self.log.info("Convolver: Start Init result previous fft plans")
         self.resultLeftPreviousIFFTPlan = pyfftw.builders.irfft(self.resultLeftFreqPrevious,
                                                                 overwrite_input=True, threads=nThreads,
                                                                 planner_effort=self.fftw_planning_effort, avoid_copy=True)
@@ -195,17 +195,18 @@ class ConvolverFFTW(object):
 
 
         # Third: Transformation back to time domain
-        self.outputLeft = self.resultLeftIFFTPlan()[self.block_size:self.block_size * 2]
-        self.outputRight = self.resultRightIFFTPlan()[self.block_size:self.block_size * 2]
+        self.outputLeft[:] = self.resultLeftIFFTPlan()[self.block_size:self.block_size * 2]
+        self.outputRight[:] = self.resultRightIFFTPlan()[self.block_size:self.block_size * 2]
+
 
         # Also convolute old filter amd do crossfade of output block if interpolation is wanted
         if self.interpolate:
             self.resultLeftFreqPrevious[:] = np.sum(np.multiply(self.TF_left_blocked_previous, self.FDL_left), axis=0)
             self.resultRightFreqPrevious[:] = np.sum(np.multiply(self.TF_right_blocked_previous, self.FDL_right), axis=0)
             # fade over full block size
-            self.outputLeft = np.add(np.multiply(self.outputLeft, self.crossFadeIn),
+            self.outputLeft[:] = np.add(np.multiply(self.outputLeft, self.crossFadeIn),
                                      np.multiply(self.resultLeftPreviousIFFTPlan()[self.block_size:self.block_size * 2], self.crossFadeOut))
-            self.outputRight = np.add(np.multiply(self.outputRight, self.crossFadeIn),
+            self.outputRight[:] = np.add(np.multiply(self.outputRight, self.crossFadeIn),
                                       np.multiply(self.resultRightPreviousIFFTPlan()[self.block_size:self.block_size*2], self.crossFadeOut))
 
         self.processCounter += 1

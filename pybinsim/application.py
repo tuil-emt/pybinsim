@@ -36,6 +36,7 @@ from pybinsim.soundhandler import SoundHandler
 from pybinsim.input_buffer import InputBuffer
 
 import timeit
+import pydevd
 
 def parse_boolean(any_value):
 
@@ -156,10 +157,13 @@ class BinSim(object):
                                           blocksize=self.blockSize,
                                           callback=audio_callback(self))
 
+           #pydevd.settrace(suspend=False, trace_only_current_thread=True)
+
             with self.stream as s:
                 self.log.info(f"latency: {s.latency} seconds")
                 while True:
                     sd.sleep(1000)
+
 
         except KeyboardInterrupt:
             print("KEYBOARD")
@@ -283,29 +287,35 @@ def audio_callback(binsim):
 
                 # Get new Filter
                 if binsim.oscReceiver.is_ds_filter_update_necessary(n):
+                    binsim.log.warning('updating_ds')
                     ds_filterValueList = binsim.oscReceiver.get_current_ds_filter_values(n)
                     ds_filter = binsim.filterStorage.get_ds_filter(Pose.from_filterValueList(ds_filterValueList))
                     binsim.ds_convolvers[n].setIR(ds_filter, callback.config.get('enableCrossfading'))
 
-                # Get new late reverb Filter
+                # Get new early reverb Filter
                 if binsim.oscReceiver.is_early_filter_update_necessary(n):
+                    binsim.log.warning('updating_early')
                     early_filterValueList = binsim.oscReceiver.get_current_early_filter_values(n)
                     early_filter = binsim.filterStorage.get_early_filter(Pose.from_filterValueList(early_filterValueList))
                     binsim.early_convolvers[n].setIR(early_filter, callback.config.get('enableCrossfading'))
 
                 # Get new late reverb Filter
                 if binsim.oscReceiver.is_late_filter_update_necessary(n):
+                    binsim.log.warning('updating_late')
                     late_filterValueList = binsim.oscReceiver.get_current_late_filter_values(n)
                     late_filter = binsim.filterStorage.get_late_filter(Pose.from_filterValueList(late_filterValueList))
                     binsim.late_convolvers[n].setIR(late_filter, callback.config.get('enableCrossfading'))
 
                 input_mono = binsim.input_BufferMono.process(binsim.block[n, :])
                 left_ds, right_ds, count = binsim.ds_convolvers[n].process(input_mono)
-                left_early, right_early, _ = binsim.early_convolvers[n].process(input_mono)
-                left_late, right_late, _ = binsim.late_convolvers[n].process(input_mono)
+                #left_early, right_early, _ = binsim.early_convolvers[n].process(input_mono)
+                #left_late, right_late, _ = binsim.late_convolvers[n].process(input_mono)
 
-                left = left_ds + left_early + left_late
-                right = right_ds + right_early + right_late
+                #left = left_ds + left_early + left_late
+                #right = right_ds + right_early + right_late
+
+                left = left_ds
+                right = right_ds
 
                 # Sum results from all convolvers
                 if n == 0:

@@ -147,9 +147,9 @@ class FilterStorage(object):
                                                         n=self.block_size * 2, axis=1, threads=nThreads,
                                                         planner_effort=fftw_planning_effort)
 
-        #test = np.zeros((self.ds_size, 2), dtype='float32')
-        #test[0, 0] = 1
-        #test[0, 1] = 1
+        test = np.zeros((self.ds_size, 2), dtype='float32')
+        test[0, 0] = 1
+        test[0, 1] = 1
         self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size)
         #self.default_ds_filter = Filter(test, self.ds_blocks, self.block_size)
 
