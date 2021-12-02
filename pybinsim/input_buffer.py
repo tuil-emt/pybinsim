@@ -56,6 +56,7 @@ class InputBuffer(object):
             loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
             pyfftw.import_wisdom(loaded_wisdom)
 
+
         # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
         # freq domain regularly
         self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
@@ -67,12 +68,12 @@ class InputBuffer(object):
         self.buffer2FftPlan = pyfftw.builders.rfft(self.buffer2, overwrite_input=True, threads=nThreads,
                                                    planner_effort=self.fftw_planning_effort, avoid_copy=True)
 
-
         # save FFTW plans to recover for next pyBinSim session
         collected_wisdom = pyfftw.export_wisdom()
         if not pn_temporary.exists():
             pn_temporary.mkdir(parents=True)
         pickle.dump(collected_wisdom, open(fn_wisdom, "wb"))
+
 
 
         # Select mono or stereo processing
@@ -122,6 +123,7 @@ class InputBuffer(object):
             # insert new block to buffer
             self.buffer[self.block_size:] = block
 
+
         return self.bufferFftPlan(self.buffer)
 
     def fill_buffer_stereo(self, block):
@@ -162,6 +164,8 @@ class InputBuffer(object):
         :return: (outputLeft, outputRight)
         """
 
+        self.processCounter += 1
+
         # First: Fill buffer and FDLs with current block
         if not self.processStereo:
             # print('Convolver Mono Processing')
@@ -169,6 +173,7 @@ class InputBuffer(object):
         else:
             # print('Convolver Stereo Processing')
             return self.fill_buffer_stereo(block)
+
 
 
     def close(self):

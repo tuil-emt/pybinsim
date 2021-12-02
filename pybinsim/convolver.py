@@ -143,10 +143,13 @@ class ConvolverFFTW(object):
         :param do_interpolation:
         :return: None
         """
+        #self.TF_left_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        #self.TF_right_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
 
         left, right = current_filter.getFilterFD()
-        self.TF_left_blocked[:] = left
-        self.TF_right_blocked[:] = right
+        self.TF_left_blocked = left
+        self.TF_right_blocked = right
+
 
         # Interpolation means cross fading the output blocks (linear interpolation)
         self.interpolate = do_interpolation
@@ -154,8 +157,8 @@ class ConvolverFFTW(object):
 
     def saveOldFilters(self):
         # Save old filters in case interpolation is needed
-        self.TF_left_blocked_previous[:] = self.TF_left_blocked
-        self.TF_right_blocked_previous[:] = self.TF_right_blocked
+        self.TF_left_blocked_previous = self.TF_left_blocked
+        self.TF_right_blocked_previous = self.TF_right_blocked
 
     def process_nothing(self):
         """
@@ -164,14 +167,13 @@ class ConvolverFFTW(object):
         """
         self.processCounter += 1
 
-    def process(self, input_buffer1, input_buffer2 = 0):
+    def process(self, input_buffer1, input_buffer2=0):
         """
         Main function
 
         :param block:
         :return: (outputLeft, outputRight)
         """
-
         # Fill FDL's with need data from input buffer(s)
         if self.processCounter > 0:
             # shift FDLs
@@ -185,7 +187,6 @@ class ConvolverFFTW(object):
         else:
             self.FDL_left[0, ] = self.FDL_right[0, ] = input_buffer1
 
-
         # Save previous filters
         self.saveOldFilters()
 
@@ -195,8 +196,8 @@ class ConvolverFFTW(object):
 
 
         # Third: Transformation back to time domain
-        self.outputLeft[:] = self.resultLeftIFFTPlan()[self.block_size:self.block_size * 2]
-        self.outputRight[:] = self.resultRightIFFTPlan()[self.block_size:self.block_size * 2]
+        self.outputLeft = self.resultLeftIFFTPlan()[self.block_size:self.block_size * 2]
+        self.outputRight = self.resultRightIFFTPlan()[self.block_size:self.block_size * 2]
 
 
         # Also convolute old filter amd do crossfade of output block if interpolation is wanted

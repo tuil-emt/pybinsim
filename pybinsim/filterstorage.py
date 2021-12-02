@@ -47,9 +47,10 @@ class Filter(object):
 
         self.TF_blocks = irBlocks
         self.TF_block_size = block_size + 1
-    
+
         self.IR_left_blocked = np.reshape(inputfilter[:, 0], (irBlocks, block_size))
         self.IR_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
+
         self.filename = filename
         
         self.fd_available = False
@@ -82,8 +83,8 @@ class Filter(object):
         self.TF_left_blocked = np.zeros((self.ir_blocks, self.block_size + 1), dtype='complex64')
         self.TF_right_blocked = np.zeros((self.ir_blocks, self.block_size + 1), dtype='complex64')
 
-        self.TF_left_blocked [:] = fftw_plan(self.IR_left_blocked)
-        self.TF_right_blocked [:] = fftw_plan(self.IR_right_blocked)
+        self.TF_left_blocked[:] = fftw_plan(self.IR_left_blocked)
+        self.TF_right_blocked[:] = fftw_plan(self.IR_right_blocked)
 
         self.fd_available = True
 
@@ -125,11 +126,6 @@ class FilterStorage(object):
         self.block_size = block_size
         self.ds_blocks = self.ds_size // self.block_size
 
-        #if self.ds_blocks == 0:
-        #    self.ds_blocks = 1
-        #    self.ds_size = self.block_size
-            # hacky, but what to do?
-
         self.early_size = early_filterSize
         self.early_blocks = self.early_size // self.block_size
 
@@ -138,20 +134,19 @@ class FilterStorage(object):
 
         
         self.ds_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ds_blocks, self.block_size), dtype='float32'),
-                                                        n=self.block_size * 2,axis=1, threads=nThreads,
-                                                        planner_effort=fftw_planning_effort)
+                                                        n=self.block_size * 2, axis=1, threads=nThreads,
+                                                        planner_effort=fftw_planning_effort,
+                                                        overwrite_input=False, avoid_copy=False)
         self.early_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.early_blocks, self.block_size), dtype='float32'),
                                                         n=self.block_size * 2, axis=1, threads=nThreads,
-                                                        planner_effort=fftw_planning_effort)
+                                                        planner_effort=fftw_planning_effort,
+                                                        overwrite_input=False, avoid_copy=False)
         self.late_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.late_blocks, self.block_size), dtype='float32'),
                                                         n=self.block_size * 2, axis=1, threads=nThreads,
-                                                        planner_effort=fftw_planning_effort)
+                                                        planner_effort=fftw_planning_effort,
+                                                        overwrite_input=False, avoid_copy=False)
 
-        test = np.zeros((self.ds_size, 2), dtype='float32')
-        test[0, 0] = 1
-        test[0, 1] = 1
         self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size)
-        #self.default_ds_filter = Filter(test, self.ds_blocks, self.block_size)
 
         self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size)
         self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size)
