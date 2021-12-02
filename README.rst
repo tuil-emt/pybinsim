@@ -158,6 +158,10 @@ Or a sound file list
 
 The audiofile has to be located on the pc where pyBinSim runs. Files are not transmitted over network.
 
+Example
+-----
+
+Take a look at the examples to see how a project can be arranged. Also take a look at the ds, early and late filters to see how they need to be designed.
 
 Demos
 -----
