@@ -29,7 +29,7 @@ For Powershell, the activation command is `venv/Scripts/Activate.ps1`.
 conda
 
 ::
-    $ conda create --name binsim python>=3.6 numpy
+    $ conda create --name binsim python=3.6 numpy
     $ conda activate binsim
     $ pip install pybinsim
 
@@ -63,7 +63,7 @@ python
 conda
 
 ::
-    $ conda create --name binsim python>=3.6 numpy
+    $ conda create --name binsim python=3.6 numpy
     $ conda activate binsim
     $ pip install pybinsim
     
@@ -75,16 +75,21 @@ Create ``pyBinSimSettings.txt`` file with content like this
 
 ::
 
-    soundfile signals/test441kHz.wav
-    blockSize 512
-    filterSize 16384
-    filterList brirs/filter_list_kemar5.txt
-    maxChannels 2
-    samplingRate 44100
-    enableCrossfading True
-    useHeadphoneFilter False
-    loudnessFactor 0.5
-    loopSound False
+soundfile signals/speech2_48000_mono.wav
+blockSize 128
+ds_filterSize 256
+early_filterSize 3072
+late_filterSize 32768
+filterList brirs/filtermap.txt
+maxChannels 2
+samplingRate 48000
+enableCrossfading True
+useHeadphoneFilter True
+headphone_filterSize 1024
+loudnessFactor 0.5
+loopSound True
+pauseConvolution False
+pauseAudioPlayback False
 
 
 Start Binaural Simulation
@@ -116,8 +121,14 @@ soundfile:
     Defines \*.wav file which is played back at startup. Sound file can contain up to maxChannels audio channels. Also accepts multiple files separated by '#'; Example: 'soundfile signals/sound1.wav#signals/sound2.wav
 blockSize: 
     Number of samples which are processed per block. Low values reduce delay but increase cpu load.
-filterSize: 
-    Defines filter size of the filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+ds_filterSize: 
+    Defines filter size of the direct sound filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+early_filterSize: 
+    Defines filter size of the early filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+late_filterSize: 
+    Defines filter size of the late reverb filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+headphone_filterSize: 
+    Defines filter size of the headphone compensation filters loaded with the filter list. Filter size should be a mutltiple of blockSize.    
 maxChannels: 
     Maximum number of sound sources/audio channels which can be controlled during runtime. The value for maxChannels must match or exceed the number of channels of soundFile(s).
 samplingRate: 
@@ -130,19 +141,48 @@ loudnessFactor:
     Factor for overall output loudness. Attention: Clipping may occur
 loopSound:
     Enables looping of sound file or sound file list. Set 'False' or 'True'.
-
+pauseConvolution:
+    Bypasses convolution
+pauseAudioPlayback:
+    Audio playback is paused
 
 OSC Messages and filter lists:
 ------------------------------
 
-Example line from filter list:
-165 2 0 0 0 0 brirs/kemar5/kemar_0_165.wav
-
-To activate this filter for the third channel (counting starts at zero) for your wav file you have to send the following message to the pc where pyBinSim runs (port 10000):
+Example lines from filter list:
 
 ::
 
-    /pyBinSim 2 165 2 0 0 0 0
+    HPFILTER hpirs/DT990_EQ_filter_2ch.wav
+    DSFILTER 165 2 0 0 0 0 0 0 0 brirs/kemar_0_165_ds.wav
+    EARLYFILTER 165 2 0 0 0 0 0 0 0 brirs/kemar_0_165_early.wav
+    LATEFILTER 0 2 0 0 0 0 0 0 0 brirs/late_reverb.wav
+
+Lines with the prefix DSFILTER,EARLYFILTER and LATEFILTER contain a 'filter key' which consist of 6 or 9 positive numbers. These numbers
+can be arbitrarily assigned to suit your use case. They are used to tell pyBinSim which filter to apply.
+The filter behind the prefix HPFILTER will be loaded and applied automatically when useHeadphoneFilter == True.
+Lines which start with DSFILTER,EARLYFILTER or LATEFILTE have to be called via OSC commands to become active.
+To activate a DSFILTER for the third channel of your wav file you have to send the the identifier
+'/pyBinSim_ds_Filter', followed by a 2 (corresponding to the third channel) and followed by the nine 9 key numbers from the filter list
+to the pc where pyBinSim runs (UDP, port 10000):
+
+::
+
+    /pyBinSim_ds_Filter 2 165 2 0 0 0 0 0 0 0
+
+When you want to apply an early filter
+
+::
+
+    /pyBinSim_early_Filter 2 0 2 0 0 0 0 0 0 0
+
+
+When you want to apply a late filter
+
+::
+
+    /pyBinSim_late_Filter 2 0 2 0 0 0 0 0 0 0
+      
         
 When you want to play another sound file you send:
 
@@ -150,7 +190,7 @@ When you want to play another sound file you send:
 
     /pyBinSimFile folder/file_new.wav
 
-Or a sound file list
+Or a sound file list:
 
 ::
 
@@ -158,11 +198,20 @@ Or a sound file list
 
 The audiofile has to be located on the pc where pyBinSim runs. Files are not transmitted over network.
 
+Further OSC Messages:
+------------------------------
 
-Demos
------
+Pause audio playback. Send 'True' or 'False' (as string, not bool)
 
-Check the https://github.com/pyBinSim/AppExamples repository for ready-to-use demos.
+::
+
+    /pyBinSimPauseAudioPlayback 'True'
+
+Bypass convolution. Send 'True' or 'False' (as string, not bool)
+
+::
+
+    /pyBinSimPauseConvolution 'True'
 
 
 
