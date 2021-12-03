@@ -36,7 +36,6 @@ from pybinsim.soundhandler import SoundHandler
 from pybinsim.input_buffer import InputBuffer
 
 import timeit
-import pydevd
 
 def parse_boolean(any_value):
 
