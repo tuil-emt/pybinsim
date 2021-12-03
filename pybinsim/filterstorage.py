@@ -373,5 +373,9 @@ class FilterStorage(object):
             if filter_size[0] > self.lateReverbSize:
                 self.log.warning('Reverb Filter too long: shorten')
                 current_filter = current_filter[:self.lateReverbSize]
+            if filter_size[0] < self.lateReverbSize:
+                self.log.warning('LateReverb too short: Fill up with zeros')
+                current_filter = np.concatenate((current_filter, np.zeros(
+                    (self.lateReverbSize - filter_size[0], 2), np.float32)), 0)
 
         return current_filter
