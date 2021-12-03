@@ -43,9 +43,9 @@ class ConvolverTorch(object):
         self.log.info("Convolver: Start Init")
 
         # Torch options
-        device_type = 'cpu'
-        #device_type = 'cuda'
-        torch_device = torch.device(device_type)
+        #device_type = 'cpu'
+        device_type = 'cuda'
+        self.torch_device = torch.device(device_type)
 
         # Get Basic infos
         self.IR_size = ir_size
@@ -58,31 +58,31 @@ class ConvolverTorch(object):
         self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
         self.crossFadeOut = np.square(np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
         self.crossFadeIn = np.flipud(self.crossFadeOut)
-        self.crossFadeOut = torch.as_tensor(self.crossFadeOut, dtype=torch.float32, device=torch_device)
-        self.crossFadeIn = torch.as_tensor(self.crossFadeIn, dtype=torch.float32, device=torch_device)
+        self.crossFadeOut = torch.as_tensor(self.crossFadeOut, dtype=torch.float32, device=self.torch_device)
+        self.crossFadeIn = torch.as_tensor(np.copy(self.crossFadeIn), dtype=torch.float32, device=self.torch_device)
 
         # Filter format: [nBlocks,blockSize*2]
         self.TF_left_blocked = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64,
-                                           device=torch_device)
+                                           device=self.torch_device)
         self.TF_right_blocked = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64,
-                                            device=torch_device)
+                                            device=self.torch_device)
         self.TF_left_blocked_previous = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64,
-                                                    device=torch_device)
+                                                    device=self.torch_device)
         self.TF_right_blocked_previous = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64,
-                                                     device=torch_device)
+                                                     device=self.torch_device)
 
-        self.FDL_left = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64, device=torch_device)
-        self.FDL_right = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64, device=torch_device)
+        self.FDL_left = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
+        self.FDL_right = torch.zeros(self.IR_blocks, self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
 
         # Arrays for the result of the complex multiply and add
-        self.resultLeftFreq = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=torch_device)
-        self.resultRightFreq = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=torch_device)
-        self.resultLeftFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=torch_device)
-        self.resultRightFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=torch_device)
+        self.resultLeftFreq = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
+        self.resultRightFreq = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
+        self.resultLeftFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
+        self.resultRightFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
 
         # Result of the ifft is stored here
-        self.outputLeft = torch.zeros(self.block_size, dtype=torch.float32, device=torch_device)
-        self.outputRight = torch.zeros(self.block_size, dtype=torch.float32, device=torch_device)
+        self.outputLeft = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputRight = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
 
         # Counts how often process() is called
         self.processCounter = 0
@@ -115,8 +115,8 @@ class ConvolverTorch(object):
         """
 
         left, right = current_filter.getFilterFD()
-        self.TF_left_blocked = left
-        self.TF_right_blocked = right
+        self.TF_left_blocked = torch.as_tensor(left, device=self.torch_device)
+        self.TF_right_blocked = torch.as_tensor(right, device=self.torch_device)
 
 
         # Interpolation means cross fading the output blocks (linear interpolation)
@@ -176,11 +176,11 @@ class ConvolverTorch(object):
 
             # fade over full block size
             self.outputLeft = torch.add(torch.multiply(self.outputLeft, self.crossFadeIn),
-                                        torch.multiply(torch.fft.irfft(self.resultLeftFreqPrevious)[
+                                        torch.multiply(torch.fft.irfft(self.resultLeftFreqPrevious)[:,
                                                        self.block_size:self.block_size * 2], self.crossFadeOut))
 
             self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
-                                         torch.multiply(torch.fft.irfft(self.resultLeftFreqPrevious)[
+                                         torch.multiply(torch.fft.irfft(self.resultLeftFreqPrevious)[:,
                                                         self.block_size:self.block_size * 2], self.crossFadeOut))
 
         self.processCounter += 1

@@ -27,9 +27,7 @@ from pathlib import Path
 from timeit import default_timer
 
 import numpy as np
-import pyfftw
-
-nThreads = multiprocessing.cpu_count()
+import torch
 
 
 class InputBuffer(object):
@@ -43,38 +41,18 @@ class InputBuffer(object):
         self.log = logging.getLogger("pybinsim.input_buffer")
         self.log.info("Input_buffer: Start Init")
 
-        # pyFFTW Options
-        pyfftw.interfaces.cache.enable()
-        self.fftw_planning_effort = 'FFTW_ESTIMATE'
+        # Torch Options
+        device_type = 'cpu'
+        #device_type = 'cuda'
+        torch_device = torch.device(device_type)
 
         # Get Basic infos
         self.block_size = block_size
 
-        pn_temporary = Path(__file__).parent.parent / "tmp"
-        fn_wisdom = pn_temporary / "fftw_wisdom.pickle"
-        if pn_temporary.exists() and fn_wisdom.exists():
-            loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
-            pyfftw.import_wisdom(loaded_wisdom)
 
-
-        # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
-        # freq domain regularly
-        self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
-        self.bufferFftPlan = pyfftw.builders.rfft(self.buffer, overwrite_input=True, threads=nThreads,
-                                                  planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        self.buffer2 = pyfftw.zeros_aligned(
-            self.block_size * 2, dtype='float32')
-        self.buffer2FftPlan = pyfftw.builders.rfft(self.buffer2, overwrite_input=True, threads=nThreads,
-                                                   planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        # save FFTW plans to recover for next pyBinSim session
-        collected_wisdom = pyfftw.export_wisdom()
-        if not pn_temporary.exists():
-            pn_temporary.mkdir(parents=True)
-        pickle.dump(collected_wisdom, open(fn_wisdom, "wb"))
-
-
+        # Create Input Buffers
+        self.buffer = torch.zeros(self.block_size * 2, dtype=torch.float32, device=torch_device)
+        self.buffer2 = torch.zeros(self.block_size * 2, dtype=torch.float32, device=torch_device)
 
         # Select mono or stereo processing
         self.processStereo = process_stereo
@@ -108,23 +86,14 @@ class InputBuffer(object):
         :return: None
         """
 
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            block = np.concatenate(
-                (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
-
-        if self.processCounter == 0:
-            # insert first block to buffer
-            self.buffer[self.block_size:] = block
-
-        else:
+        if self.processCounter > 0:
             # shift buffer
             self.buffer[:self.block_size] = self.buffer[self.block_size:]
-            # insert new block to buffer
-            self.buffer[self.block_size:] = block
 
+        # insert new block to buffer
+        self.buffer[self.block_size:] = torch.as_tensor(block)
 
-        return self.bufferFftPlan(self.buffer)
+        return torch.fft.rfft(self.buffer)
 
     def fill_buffer_stereo(self, block):
         """
@@ -135,26 +104,15 @@ class InputBuffer(object):
         :return: None
         """
 
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            # print(np.shape(block))
-            block = np.concatenate(
-                (block, np.zeros(((self.block_size - block.size), 2), dtype=np.float32)), 0)
-
-        if self.processCounter == 0:
-            # insert first block to buffer
-            self.buffer[self.block_size:] = block[:, 0]
-            self.buffer2[self.block_size:] = block[:, 1]
-
-        else:
+        if self.processCounter > 0:
             # shift buffer
             self.buffer[:self.block_size] = self.buffer[self.block_size:]
             self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
-            # insert new block to buffer
-            self.buffer[self.block_size:] = block[:, 0]
-            self.buffer2[self.block_size:] = block[:, 1]
 
-        return self.bufferFftPlan(self.buffer), self.buffer2FftPlan(self.buffer2)
+        self.buffer[self.block_size:] = torch.as_tensor(block[:, 0])
+        self.buffer2[self.block_size:] = torch.as_tensor(block[:, 1])
+
+        return torch.fft.rfft(self.buffer), torch.fft.rfft(self.buffer2)
 
     def process(self, block):
         """
@@ -166,6 +124,11 @@ class InputBuffer(object):
 
         self.processCounter += 1
 
+        if block.size < self.block_size:
+            # print('Fill up last block')
+            block = np.concatenate(
+                (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
+
         # First: Fill buffer and FDLs with current block
         if not self.processStereo:
             # print('Convolver Mono Processing')
@@ -173,8 +136,6 @@ class InputBuffer(object):
         else:
             # print('Convolver Stereo Processing')
             return self.fill_buffer_stereo(block)
-
-
 
     def close(self):
         print("Input_buffer: close")

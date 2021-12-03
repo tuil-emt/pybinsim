@@ -28,7 +28,7 @@ import sys
 import numpy as np
 import sounddevice as sd
 
-from pybinsim.convolver import ConvolverFFTW
+from pybinsim.convolver import ConvolverTorch
 from pybinsim.filterstorage import FilterStorage
 from pybinsim.osc_receiver import OscReceiver
 from pybinsim.pose import Pose
@@ -221,14 +221,14 @@ class BinSim(object):
         late_convolvers = [None] * self.nChannels
 
         for n in range(self.nChannels):
-            ds_convolvers[n] = ConvolverFFTW(ds_size, self.blockSize, False)
-            early_convolvers[n] = ConvolverFFTW(early_size, self.blockSize, False)
-            late_convolvers[n] = ConvolverFFTW(late_size, self.blockSize, False)
+            ds_convolvers[n] = ConvolverTorch(ds_size, self.blockSize, False)
+            early_convolvers[n] = ConvolverTorch(early_size, self.blockSize, False)
+            late_convolvers[n] = ConvolverTorch(late_size, self.blockSize, False)
 
         # HP Equalization convolver
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
-            convolverHP = ConvolverFFTW(self.config.get(
+            convolverHP = ConvolverTorch(self.config.get(
                 'headphone_filterSize'), self.blockSize, True)
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setIR(hpfilter, False)

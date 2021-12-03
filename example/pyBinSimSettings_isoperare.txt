@@ -3,7 +3,7 @@ blockSize 128
 ds_filterSize 256
 early_filterSize 3072
 late_filterSize 32768
-filterList brirs/filtermap.txt
+filterList brirs/filtermap_short.txt
 maxChannels 2
 samplingRate 48000
 enableCrossfading True

@@ -28,14 +28,11 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-import pyfftw
+import torch
 import time
 
 from pybinsim.pose import Pose
 from pybinsim.utility import total_size
-
-nThreads = mp.cpu_count()
-
 
 class Filter(object):
 
@@ -48,8 +45,12 @@ class Filter(object):
         self.TF_blocks = irBlocks
         self.TF_block_size = block_size + 1
 
-        self.IR_left_blocked = np.reshape(inputfilter[:, 0], (irBlocks, block_size))
-        self.IR_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
+        ir_left_blocked = np.reshape(inputfilter[:, 0], (irBlocks, block_size))
+        ir_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
+        self.IR_left_blocked = torch.as_tensor(ir_left_blocked)
+        self.IR_right_blocked = torch.as_tensor(ir_right_blocked)
+        self.TF_left_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64)
+        self.TF_right_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64)
 
         self.filename = filename
         
@@ -63,8 +64,8 @@ class Filter(object):
     def getFilterTD(self):
         if self.fd_available:
             self.log.warning("FilterStorage: No time domain filter available!")
-            left = np.zeros((self.ir_blocks, self.block_size))
-            right = np.zeros((self.ir_blocks, self.block_size))
+            left = torch.zeros((self.ir_blocks, self.block_size))
+            right = torch.zeros((self.ir_blocks, self.block_size))
         else:
             left = self.IR_left_blocked
             right = self.IR_right_blocked
@@ -72,19 +73,18 @@ class Filter(object):
         return left, right
 
     def apply_fadeout(self,window):
-        self.IR_left_blocked[self.ir_blocks-1, :] = np.multiply(self.IR_left_blocked[self.ir_blocks-1, :], window)
-        self.IR_right_blocked[self.ir_blocks-1, :] = np.multiply(self.IR_right_blocked[self.ir_blocks-1, :], window)
+        self.IR_left_blocked[self.ir_blocks-1, :] = torch.multiply(self.IR_left_blocked[self.ir_blocks-1, :], window)
+        self.IR_right_blocked[self.ir_blocks-1, :] = torch.multiply(self.IR_right_blocked[self.ir_blocks-1, :], window)
 
     def apply_fadein(self,window):
-        self.IR_left_blocked[0, :] = np.multiply(self.IR_left_blocked[0, :], window)
-        self.IR_right_blocked[0, :] = np.multiply(self.IR_right_blocked[0, :], window)
+        self.IR_left_blocked[0, :] = torch.multiply(self.IR_left_blocked[0, :], window)
+        self.IR_right_blocked[0, :] = torch.multiply(self.IR_right_blocked[0, :], window)
 
-    def storeInFDomain(self,fftw_plan):
-        self.TF_left_blocked = np.zeros((self.ir_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_right_blocked = np.zeros((self.ir_blocks, self.block_size + 1), dtype='complex64')
+    def storeInFDomain(self):
 
-        self.TF_left_blocked[:] = fftw_plan(self.IR_left_blocked)
-        self.TF_right_blocked[:] = fftw_plan(self.IR_right_blocked)
+        self.TF_left_blocked = torch.fft.rfft(self.IR_left_blocked, dim=1, n=self.block_size*2)
+        self.TF_right_blocked = torch.fft.rfft(self.IR_right_blocked, dim=1, n=self.block_size*2)
+        #print(np.shape(self.TF_right_blocked))
 
         self.fd_available = True
 
@@ -95,8 +95,10 @@ class Filter(object):
     def getFilterFD(self):
         if not self.fd_available:
             self.log.warning("FilterStorage: No frequency domain filter available!")
-            left = np.zeros((self.ir_blocks, self.block_size+1))
-            right = np.zeros((self.ir_blocks, self.block_size+1))
+            #left = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
+            #right = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
+            left = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
+            right = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
         else:
             left = self.TF_left_blocked
             right = self.TF_right_blocked
@@ -119,9 +121,6 @@ class FilterStorage(object):
         self.log = logging.getLogger("pybinsim.FilterStorage")
         self.log.info("FilterStorage: init")
         
-        pyfftw.interfaces.cache.enable()
-        fftw_planning_effort ='FFTW_ESTIMATE'
-
         self.ds_size = ds_filterSize
         self.block_size = block_size
         self.ds_blocks = self.ds_size // self.block_size
@@ -132,42 +131,25 @@ class FilterStorage(object):
         self.late_size = late_filterSize
         self.late_blocks = self.late_size // self.block_size
 
-        
-        self.ds_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.ds_blocks, self.block_size), dtype='float32'),
-                                                        n=self.block_size * 2, axis=1, threads=nThreads,
-                                                        planner_effort=fftw_planning_effort,
-                                                        overwrite_input=False, avoid_copy=False)
-        self.early_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.early_blocks, self.block_size), dtype='float32'),
-                                                        n=self.block_size * 2, axis=1, threads=nThreads,
-                                                        planner_effort=fftw_planning_effort,
-                                                        overwrite_input=False, avoid_copy=False)
-        self.late_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.late_blocks, self.block_size), dtype='float32'),
-                                                        n=self.block_size * 2, axis=1, threads=nThreads,
-                                                        planner_effort=fftw_planning_effort,
-                                                        overwrite_input=False, avoid_copy=False)
-
         self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size)
-
         self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size)
         self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size)
-        self.default_ds_filter.storeInFDomain(self.ds_filter_fftw_plan)
-        self.default_early_filter.storeInFDomain(self.early_filter_fftw_plan)
-        self.default_late_filter.storeInFDomain(self.late_filter_fftw_plan)
+
+        self.default_ds_filter.storeInFDomain()
+        self.default_early_filter.storeInFDomain()
+        self.default_late_filter.storeInFDomain()
         
-        # Calculate COSINE-Square crossfade windows
+        # Calculate COSINE-Square crossfade windows - also used in convolver
         self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
         self.crossFadeOut = np.square(np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
         self.crossFadeIn = np.flipud(self.crossFadeOut)
+        self.crossFadeOut = torch.as_tensor(self.crossFadeOut)
+        self.crossFadeIn = torch.as_tensor(np.copy(self.crossFadeIn))
 
         self.useHeadphoneFilter = useHeadphoneFilter
         if useHeadphoneFilter:
             self.headPhoneFilterSize = headphoneFilterSize
             self.headphone_ir_blocks = headphoneFilterSize // block_size
-
-            self.hp_filter_fftw_plan = pyfftw.builders.rfft(np.zeros((self.headphone_ir_blocks, self.block_size), dtype='float32'),
-                                                          n=self.block_size * 2, axis=1, overwrite_input=False,
-                                                          threads=nThreads, planner_effort=fftw_planning_effort,
-                                                          avoid_copy=False)
 
         self.filter_list_path = filter_list_name
         self.filter_list = open(self.filter_list_path, 'r')
@@ -211,7 +193,7 @@ class FilterStorage(object):
                 if self.useHeadphoneFilter:
                     self.log.info("Loading headphone filter: {}".format(filter_path))
                     self.headphone_filter = Filter(self.load_filter(filter_path, FilterType.headphone_Filter), self.headphone_ir_blocks, self.block_size)
-                    self.headphone_filter.storeInFDomain(self.hp_filter_fftw_plan)
+                    self.headphone_filter.storeInFDomain()
                     continue
                 else:
                     #self.headphone_filter = Filter(self.load_filter(filter_path), self.ir_blocks, self.block_size)
@@ -291,7 +273,7 @@ class FilterStorage(object):
                 
                 # apply fade out to all filters
                 # current_filter.apply_fadeout(self.crossFadeOut)
-                current_filter.storeInFDomain(self.ds_filter_fftw_plan)
+                current_filter.storeInFDomain()
                 
                 # create key and store in dict
                 key = filter_pose.create_key()
@@ -303,7 +285,7 @@ class FilterStorage(object):
                 
                 # apply fade in to all late reverb filters
                 # current_filter.apply_fadein(self.crossFadeIn)
-                current_filter.storeInFDomain(self.early_filter_fftw_plan)
+                current_filter.storeInFDomain()
                 
                 #create key and store in dict
                 key = filter_pose.create_key()
@@ -315,7 +297,7 @@ class FilterStorage(object):
 
                 # apply fade in to all late reverb filters
                 # current_filter.apply_fadein(self.crossFadeIn)
-                current_filter.storeInFDomain(self.late_filter_fftw_plan)
+                current_filter.storeInFDomain()
 
                 # create key and store in dict
                 key = filter_pose.create_key()
