@@ -43,8 +43,8 @@ class ConvolverTorch(object):
         self.log.info("Convolver: Start Init")
 
         # Torch options
-        #device_type = 'cpu'
-        device_type = 'cuda'
+        device_type = 'cpu'
+        #device_type = 'cuda'
         self.torch_device = torch.device(device_type)
 
         # Get Basic infos

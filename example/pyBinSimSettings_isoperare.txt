@@ -1,5 +1,5 @@
 soundfile signals/speech2_48000_mono.wav
-blockSize 128
+blockSize 256
 ds_filterSize 256
 early_filterSize 3072
 late_filterSize 32768
