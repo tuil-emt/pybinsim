@@ -71,7 +71,9 @@ class BinSimConfig(object):
                                   'samplingRate': 48000,
                                   'loopSound': True,
                                   'pauseConvolution': False,
-                                  'pauseAudioPlayback': False}
+                                  'pauseAudioPlayback': False,
+                                  'torchConvolution[cpu/cuda]': 'cuda',
+                                  'torchStorage[cpu/cuda]': 'cuda'}
 
     def read_from_file(self, filepath):
         config = open(filepath, 'r')
@@ -191,11 +193,12 @@ class BinSim(object):
         # Create FilterStorage
         filterStorage = FilterStorage(self.blockSize,
                                       self.config.get('filterList'),
+                                      self.config.get('torchStorage[cpu/cuda]'),
                                       self.config.get('useHeadphoneFilter'),
                                       self.config.get('headphone_filterSize'),
                                       ds_size,
                                       early_size,
-                                      late_size )
+                                      late_size)
 
         # Start an oscReceiver
         oscReceiver = OscReceiver(self.config)
@@ -210,8 +213,8 @@ class BinSim(object):
         soundHandler.request_new_sound_file(soundfile_list)
 
         # Create input buffers
-        input_BufferMono = InputBuffer(self.blockSize,  False)
-        input_BufferStereo = InputBuffer(self.blockSize,  True)
+        input_BufferMono = InputBuffer(self.blockSize,  False, self.config.get('torchConvolution[cpu/cuda]'))
+        input_BufferStereo = InputBuffer(self.blockSize,  True, self.config.get('torchConvolution[cpu/cuda]'))
 
 
         # Create N convolvers depending on the number of wav channels
@@ -221,15 +224,15 @@ class BinSim(object):
         late_convolvers = [None] * self.nChannels
 
         for n in range(self.nChannels):
-            ds_convolvers[n] = ConvolverTorch(ds_size, self.blockSize, False)
-            early_convolvers[n] = ConvolverTorch(early_size, self.blockSize, False)
-            late_convolvers[n] = ConvolverTorch(late_size, self.blockSize, False)
+            ds_convolvers[n] = ConvolverTorch(ds_size, self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
+            early_convolvers[n] = ConvolverTorch(early_size, self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
+            late_convolvers[n] = ConvolverTorch(late_size, self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
 
         # HP Equalization convolver
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
             convolverHP = ConvolverTorch(self.config.get(
-                'headphone_filterSize'), self.blockSize, True)
+                'headphone_filterSize'), self.blockSize, True, self.config.get('torchConvolution[cpu/cuda]'))
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setIR(hpfilter, False)
 

@@ -35,16 +35,14 @@ class InputBuffer(object):
     blubb
     """
 
-    def __init__(self, block_size, process_stereo):
+    def __init__(self, block_size, process_stereo,torch_settings):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.input_buffer")
         self.log.info("Input_buffer: Start Init")
 
         # Torch Options
-        device_type = 'cpu'
-        #device_type = 'cuda'
-        torch_device = torch.device(device_type)
+        torch_device = torch.device(torch_settings)
 
         # Get Basic infos
         self.block_size = block_size

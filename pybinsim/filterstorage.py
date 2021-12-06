@@ -36,8 +36,11 @@ from pybinsim.utility import total_size
 
 class Filter(object):
 
-    def __init__(self, inputfilter, irBlocks, block_size, filename=None):
+    def __init__(self, inputfilter, irBlocks, block_size,torch_settings, filename=None ):
         self.log = logging.getLogger("pybinsim.Filter")
+
+        # Torch options
+        self.torch_device = torch.device(torch_settings)
 
         self.ir_blocks = irBlocks
         self.block_size = block_size
@@ -47,10 +50,10 @@ class Filter(object):
 
         ir_left_blocked = np.reshape(inputfilter[:, 0], (irBlocks, block_size))
         ir_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
-        self.IR_left_blocked = torch.as_tensor(ir_left_blocked)
-        self.IR_right_blocked = torch.as_tensor(ir_right_blocked)
-        self.TF_left_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64)
-        self.TF_right_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64)
+        self.IR_left_blocked = torch.as_tensor(ir_left_blocked, dtype=torch.float32, device=self.torch_device)
+        self.IR_right_blocked = torch.as_tensor(ir_right_blocked, dtype=torch.float32, device=self.torch_device)
+        self.TF_left_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
+        self.TF_right_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
 
         self.filename = filename
         
@@ -116,7 +119,7 @@ class FilterStorage(object):
     """ Class for storing all filters mentioned in the filter list """
 
     #def __init__(self, irSize, block_size, filter_list_name):
-    def __init__(self, block_size, filter_list_name, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
+    def __init__(self, block_size, filter_list_name, torch_settings, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
 
         self.log = logging.getLogger("pybinsim.FilterStorage")
         self.log.info("FilterStorage: init")
@@ -131,9 +134,11 @@ class FilterStorage(object):
         self.late_size = late_filterSize
         self.late_blocks = self.late_size // self.block_size
 
-        self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size)
-        self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size)
-        self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size)
+        self.torch_settings = torch_settings
+
+        self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size, torch_settings)
+        self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size, torch_settings)
+        self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size, torch_settings)
 
         self.default_ds_filter.storeInFDomain()
         self.default_early_filter.storeInFDomain()
@@ -192,7 +197,7 @@ class FilterStorage(object):
             if line.startswith('HPFILTER'):
                 if self.useHeadphoneFilter:
                     self.log.info("Loading headphone filter: {}".format(filter_path))
-                    self.headphone_filter = Filter(self.load_filter(filter_path, FilterType.headphone_Filter), self.headphone_ir_blocks, self.block_size)
+                    self.headphone_filter = Filter(self.load_filter(filter_path, FilterType.headphone_Filter), self.headphone_ir_blocks, self.block_size, self.torch_settings)
                     self.headphone_filter.storeInFDomain()
                     continue
                 else:
@@ -269,7 +274,7 @@ class FilterStorage(object):
             self.log.debug(f'Loading {filter_path}')
             if filter_type == FilterType.ds_Filter:
                 # preprocess filters and put them in a dict
-                current_filter = Filter(self.load_filter(filter_path, filter_type), self.ds_blocks, self.block_size)
+                current_filter = Filter(self.load_filter(filter_path, filter_type), self.ds_blocks, self.block_size, self.torch_settings)
                 
                 # apply fade out to all filters
                 # current_filter.apply_fadeout(self.crossFadeOut)
@@ -281,7 +286,7 @@ class FilterStorage(object):
             
             if filter_type == FilterType.early_Filter:
                 # preprocess late reverb filters and put them in a separate dict
-                current_filter = Filter(self.load_filter(filter_path, filter_type), self.early_blocks, self.block_size)
+                current_filter = Filter(self.load_filter(filter_path, filter_type), self.early_blocks, self.block_size, self.torch_settings)
                 
                 # apply fade in to all late reverb filters
                 # current_filter.apply_fadein(self.crossFadeIn)
@@ -293,7 +298,7 @@ class FilterStorage(object):
 
             if filter_type == FilterType.late_Filter:
                 # preprocess late reverb filters and put them in a separate dict
-                current_filter = Filter(self.load_filter(filter_path, filter_type), self.late_blocks, self.block_size)
+                current_filter = Filter(self.load_filter(filter_path, filter_type), self.late_blocks, self.block_size, self.torch_settings)
 
                 # apply fade in to all late reverb filters
                 # current_filter.apply_fadein(self.crossFadeIn)

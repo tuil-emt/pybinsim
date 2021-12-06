@@ -36,16 +36,14 @@ class ConvolverTorch(object):
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size, block_size, process_stereo):
+    def __init__(self, ir_size, block_size, process_stereo, torch_settings):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.ConvolverTorch")
         self.log.info("Convolver: Start Init")
 
         # Torch options
-        device_type = 'cpu'
-        #device_type = 'cuda'
-        self.torch_device = torch.device(device_type)
+        self.torch_device = torch.device(torch_settings)
 
         # Get Basic infos
         self.IR_size = ir_size
