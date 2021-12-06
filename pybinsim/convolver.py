@@ -178,7 +178,7 @@ class ConvolverTorch(object):
                                                        self.block_size:self.block_size * 2], self.crossFadeOut))
 
             self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
-                                         torch.multiply(torch.fft.irfft(self.resultLeftFreqPrevious)[:,
+                                         torch.multiply(torch.fft.irfft(self.resultRightFreqPrevious)[:,
                                                         self.block_size:self.block_size * 2], self.crossFadeOut))
 
         self.processCounter += 1
