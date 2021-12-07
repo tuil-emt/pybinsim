@@ -42,15 +42,15 @@ class InputBuffer(object):
         self.log.info("Input_buffer: Start Init")
 
         # Torch Options
-        torch_device = torch.device(torch_settings)
+        self.torch_device = torch.device(torch_settings)
 
         # Get Basic infos
         self.block_size = block_size
 
 
         # Create Input Buffers
-        self.buffer = torch.zeros(self.block_size * 2, dtype=torch.float32, device=torch_device)
-        self.buffer2 = torch.zeros(self.block_size * 2, dtype=torch.float32, device=torch_device)
+        self.buffer = torch.zeros(self.block_size * 2, dtype=torch.float32, device=self.torch_device)
+        self.buffer2 = torch.zeros(self.block_size * 2, dtype=torch.float32, device=self.torch_device)
 
         # Select mono or stereo processing
         self.processStereo = process_stereo
@@ -89,7 +89,7 @@ class InputBuffer(object):
             self.buffer[:self.block_size] = self.buffer[self.block_size:]
 
         # insert new block to buffer
-        self.buffer[self.block_size:] = torch.as_tensor(block)
+        self.buffer[self.block_size:] = torch.as_tensor(block, dtype=torch.float32, device=self.torch_device)
 
         return torch.fft.rfft(self.buffer)
 
@@ -107,8 +107,8 @@ class InputBuffer(object):
             self.buffer[:self.block_size] = self.buffer[self.block_size:]
             self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
 
-        self.buffer[self.block_size:] = torch.as_tensor(block[:, 0])
-        self.buffer2[self.block_size:] = torch.as_tensor(block[:, 1])
+        self.buffer[self.block_size:] = torch.as_tensor(block[:, 0], dtype=torch.float32, device=self.torch_device)
+        self.buffer2[self.block_size:] = torch.as_tensor(block[:, 1], dtype=torch.float32, device=self.torch_device)
 
         return torch.fft.rfft(self.buffer), torch.fft.rfft(self.buffer2)
 

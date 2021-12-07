@@ -113,8 +113,8 @@ class ConvolverTorch(object):
         """
 
         left, right = current_filter.getFilterFD()
-        self.TF_left_blocked = torch.as_tensor(left, device=self.torch_device)
-        self.TF_right_blocked = torch.as_tensor(right, device=self.torch_device)
+        self.TF_left_blocked = torch.as_tensor(left, dtype=torch.complex64, device=self.torch_device)
+        self.TF_right_blocked = torch.as_tensor(right, dtype=torch.complex64, device=self.torch_device)
 
 
         # Interpolation means cross fading the output blocks (linear interpolation)
