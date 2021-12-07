@@ -30,6 +30,82 @@ import numpy as np
 import torch
 
 
+class InputBufferMulti(object):
+    """
+    blubb
+    """
+
+    def __init__(self, block_size, inputs, torch_settings):
+        start = default_timer()
+
+        self.log = logging.getLogger("pybinsim.input_buffer")
+        self.log.info("Input_buffer: Start Init")
+
+        # Torch Options
+        self.torch_device = torch.device(torch_settings)
+
+        # Get Basic infos
+        self.block_size = block_size
+        self.inputs = inputs
+
+        # Create Input Buffers
+        self.buffer = torch.zeros(self.block_size * 2, inputs, dtype=torch.float32, device=self.torch_device)
+
+        self.processCounter = 0
+
+        end = default_timer()
+        delta = end - start
+        self.log.info("Convolver: Finished Init (took {}s)".format(delta))
+
+
+    def get_counter(self):
+        """
+        Returns processing counter
+        :return: processing counter
+        """
+        return self.processCounter
+
+    def process_nothing(self):
+        """
+        Just for testing
+        :return: None
+        """
+        self.processCounter += 1
+
+    def fill_buffer(self, block):
+        """
+        Copy mono soundblock to input Buffer;
+        Transform to Freq. Domain and store result in FDLs
+        :param block: Mono sound block
+        :return: None
+        """
+
+        if self.processCounter > 0:
+            # shift buffer
+            self.buffer[:self.block_size, :] = self.buffer[self.block_size:, :]
+
+        # insert new block to buffer
+        self.buffer[self.block_size:, :] = torch.as_tensor(np.transpose(block), dtype=torch.float32, device=self.torch_device)
+
+        return torch.fft.rfftn(self.buffer, dim=1)
+
+    def process(self, block):
+        """
+        Main function
+
+        :param block:
+        :return: (outputLeft, outputRight)
+        """
+
+        output = self.fill_buffer(block)
+
+        self.processCounter += 1
+
+        return output
+
+    def close(self):
+        print("Input_buffer: close")
+
 class InputBuffer(object):
     """
     blubb

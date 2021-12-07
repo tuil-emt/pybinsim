@@ -40,7 +40,10 @@ class OscReceiver(object):
 
         # Basic settings
         self.ip = '127.0.0.1'
-        self.port = 10000
+        self.port1 = 10000
+        self.port2 = 10001
+        self.port3 = 10002
+        self.port4 = 10003
         self.maxChannels = 100
         
         self.currentConfig = current_config
@@ -61,30 +64,45 @@ class OscReceiver(object):
         self.soundFileList = ''
         self.soundFileNew = False
 
-        osc_dispatcher = dispatcher.Dispatcher()
-        # osc_dispatcher.map("/pyBinSim", self.handle_filter_input)
-        osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
-        osc_dispatcher.map("/pyBinSim_ds_Filter", self.handle_ds_filter_input)
-        osc_dispatcher.map("/pyBinSim_ds_Filter_Short", self.handle_ds_filter_input)
-        osc_dispatcher.map("/pyBinSim_ds_Filter_Orientation", self.handle_ds_filter_input)
-        osc_dispatcher.map("/pyBinSim_ds_Filter_Position", self.handle_ds_filter_input)
-        osc_dispatcher.map("/pyBinSim_ds_Filter_Custom", self.handle_ds_filter_input)
-        osc_dispatcher.map("/pyBinSim_early_Filter", self.handle_early_filter_input)
-        osc_dispatcher.map("/pyBinSim_early_Filter_Short", self.handle_early_filter_input)
-        osc_dispatcher.map("/pyBinSim_early_Filter_Orientation", self.handle_early_filter_input)
-        osc_dispatcher.map("/pyBinSim_early_Filter_Position", self.handle_early_filter_input)
-        osc_dispatcher.map("/pyBinSim_early_Filter_Custom", self.handle_early_filter_input)
-        osc_dispatcher.map("/pyBinSim_late_Filter", self.handle_late_filter_input)
-        osc_dispatcher.map("/pyBinSim_late_Filter_Short", self.handle_late_filter_input)
-        osc_dispatcher.map("/pyBinSim_late_Filter_Orientation", self.handle_late_filter_input)
-        osc_dispatcher.map("/pyBinSim_late_Filter_Position", self.handle_late_filter_input)
-        osc_dispatcher.map("/pyBinSim_late_Filter_Custom", self.handle_late_filter_input)
-        osc_dispatcher.map("/pyBinSimFile", self.handle_file_input)
-        osc_dispatcher.map("/pyBinSimPauseAudioPlayback", self.handle_audio_pause)
-        osc_dispatcher.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
+        osc_dispatcher_ds = dispatcher.Dispatcher()
+
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter", self.handle_ds_filter_input)
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Short", self.handle_ds_filter_input)
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Orientation", self.handle_ds_filter_input)
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Position", self.handle_ds_filter_input)
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Custom", self.handle_ds_filter_input)
+
+        osc_dispatcher_early = dispatcher.Dispatcher()
+        osc_dispatcher_early.map("/pyBinSim_early_Filter", self.handle_early_filter_input)
+        osc_dispatcher_early.map("/pyBinSim_early_Filter_Short", self.handle_early_filter_input)
+        osc_dispatcher_early.map("/pyBinSim_early_Filter_Orientation", self.handle_early_filter_input)
+        osc_dispatcher_early.map("/pyBinSim_early_Filter_Position", self.handle_early_filter_input)
+        osc_dispatcher_early.map("/pyBinSim_early_Filter_Custom", self.handle_early_filter_input)
+
+        osc_dispatcher_late = dispatcher.Dispatcher()
+        osc_dispatcher_late.map("/pyBinSim_late_Filter", self.handle_late_filter_input)
+        osc_dispatcher_late.map("/pyBinSim_late_Filter_Short", self.handle_late_filter_input)
+        osc_dispatcher_late.map("/pyBinSim_late_Filter_Orientation", self.handle_late_filter_input)
+        osc_dispatcher_late.map("/pyBinSim_late_Filter_Position", self.handle_late_filter_input)
+        osc_dispatcher_late.map("/pyBinSim_late_Filter_Custom", self.handle_late_filter_input)
+
+        osc_dispatcher_misc = dispatcher.Dispatcher()
+        osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
+        osc_dispatcher_misc.map("/pyBinSimPauseAudioPlayback", self.handle_audio_pause)
+        osc_dispatcher_misc.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
+        osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
 
         self.server = osc_server.ThreadingOSCUDPServer(
-            (self.ip, self.port), osc_dispatcher)
+            (self.ip, self.port1), osc_dispatcher_ds)
+
+        self.server2 = osc_server.ThreadingOSCUDPServer(
+            (self.ip, self.port2), osc_dispatcher_early)
+
+        self.server3 = osc_server.ThreadingOSCUDPServer(
+            (self.ip, self.port3), osc_dispatcher_late)
+
+        self.server4 = osc_server.ThreadingOSCUDPServer(
+            (self.ip, self.port4), osc_dispatcher_misc)
 
     def select_slice(self, i):
         switcher = {
