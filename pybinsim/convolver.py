@@ -161,11 +161,16 @@ class ConvolverTorch(object):
         self.resultRightFreq = torch.sum(torch.multiply(self.TF_right_blocked, self.FDL_right), keepdim=True, dim=0)
 
         # Third: Transformation back to time domain
+        #tmp = torch.fft.irfft2(torch.stack([self.resultLeftFreq, self.resultRightFreq]))
+        #print(tmp.size())
+        #self.outputLeft = tmp[0,0,self.block_size:self.block_size * 2]
+        #self.outputRight= tmp[1,0,self.block_size:self.block_size * 2]
         self.outputLeft = torch.fft.irfft(self.resultLeftFreq)[:, self.block_size:self.block_size * 2]
         self.outputRight = torch.fft.irfft(self.resultRightFreq)[:, self.block_size:self.block_size * 2]
 
 
         # Also convolute old filter amd do crossfade of output block if interpolation is wanted
+        #if self.interpolate:
         if self.interpolate:
             self.resultLeftFreqPrevious = torch.sum(torch.multiply(self.TF_left_blocked_previous, self.FDL_left),
                                                     keepdim=True, dim=0)
@@ -184,7 +189,8 @@ class ConvolverTorch(object):
         self.processCounter += 1
         self.interpolate = False
 
-        return self.outputLeft.detach().cpu().numpy(), self.outputRight.detach().cpu().numpy(), self.processCounter
+        #return self.outputLeft.detach().cpu().numpy(), self.outputRight.detach().cpu().numpy(), self.processCounter
+        return self.outputLeft, self.outputRight, self.processCounter
 
     def close(self):
         print("Convolver: close")

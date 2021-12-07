@@ -36,6 +36,7 @@ from pybinsim.soundhandler import SoundHandler
 from pybinsim.input_buffer import InputBuffer
 
 import timeit
+import torch
 
 def parse_boolean(any_value):
 
@@ -172,7 +173,8 @@ class BinSim(object):
             print(e)
 
     def initialize_pybinsim(self):
-        self.result = np.empty([self.blockSize, 2], dtype=np.float32)
+        #self.result = np.empty([self.blockSize, 2], dtype=np.float32)
+        self.result = torch.zeros(self.blockSize, 2, dtype=torch.float32)
         self.block = np.empty(
             [self.nChannels, self.blockSize], dtype=np.float32)
 
@@ -264,6 +266,7 @@ def audio_callback(binsim):
         # print("python-sounddevice callback")
 
         cb_start = timeit.default_timer()
+        #cb_start = time.process_time()
         count = 0
 
         if "debugpy" in sys.modules:
@@ -290,7 +293,7 @@ def audio_callback(binsim):
 
         if binsim.current_config.get('pauseConvolution'):
             if binsim.soundHandler.get_sound_channels() == 2:
-                binsim.result = np.transpose(binsim.block[:binsim.soundHandler.get_sound_channels(), :])
+                binsim.result = torch.transpose(binsim.block[:binsim.soundHandler.get_sound_channels(), :])
             else:
                 mix = np.mean(binsim.block[:binsim.soundHandler.get_sound_channels(), :], 0)
                 binsim.result[:, 0] = mix
@@ -323,17 +326,23 @@ def audio_callback(binsim):
                 left_early, right_early, _ = binsim.early_convolvers[n].process(input_mono)
                 left_late, right_late, _ = binsim.late_convolvers[n].process(input_mono)
 
-                left = np.sum([left_ds, left_early, left_late], axis=0)
-                right = np.sum([right_ds, right_early, right_late], axis=0)
+                left = torch.sum(torch.stack([left_ds, left_early, left_late]), keepdim=True, dim=0)
+                right = torch.sum(torch.stack([right_ds, right_early, right_late]), keepdim=True, dim=0)
+
+                #left = np.sum([left_ds, left_early, left_late], axis=0)
+                #right = np.sum([right_ds, right_early, right_late], axis=0)
 
                 # Sum results from all convolvers
+                binsim.result[:, 0] = torch.add(binsim.result[:, 0], left)
+                binsim.result[:, 1] = torch.add(binsim.result[:, 1], right)
+                """""
                 if n == 0:
                     binsim.result[:, 0] = left
                     binsim.result[:, 1] = right
                 else:
-                    binsim.result[:, 0] = np.add(binsim.result[:, 0], left)
-                    binsim.result[:, 1] = np.add(binsim.result[:, 1], right)
-
+                    binsim.result[:, 0] = torch.add(binsim.result[:, 0], left)
+                    binsim.result[:, 1] = torch.add(binsim.result[:, 1], right)
+                """""
             # Finally apply Headphone Filter
             if callback.config.get('useHeadphoneFilter'):
                 binsim.result[:, 0], binsim.result[:, 1], _ = \
@@ -342,21 +351,20 @@ def audio_callback(binsim):
 
         # Scale data
         # binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
-        binsim.result = np.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels) * 2))
+        binsim.result = torch.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels) * 2))
 
+        outdata[:] = binsim.result.detach().cpu().numpy()
 
-        outdata[:, 0] = binsim.result[:, 0]
-        outdata[:, 1] = binsim.result[:, 1]
-        
         # Report buffer underrun
         if status == 4:
             binsim.log.warn('Output buffer underrun occurred')
 
         # Report clipping
-        if np.max(np.abs(binsim.result)) > 1:
+        if np.max(np.abs(outdata)) > 1:
             binsim.log.warn('Clipping occurred: Adjust loudnessFactor!')
 
         cb_end = timeit.default_timer()
+        #cb_end = time.process_time()
         cb_time = cb_end - cb_start
         # binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
         binsim.cb_time_usage[1] = cb_time/(binsim.blockSize/binsim.sampleRate)*100

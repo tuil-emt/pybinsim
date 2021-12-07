@@ -122,10 +122,13 @@ class InputBuffer(object):
 
         self.processCounter += 1
 
-        if block.size < self.block_size:
+        """""
+        # Not needed anymore?
+        if block.size< self.block_size:
             # print('Fill up last block')
             block = np.concatenate(
                 (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
+        """""
 
         # First: Fill buffer and FDLs with current block
         if not self.processStereo:
