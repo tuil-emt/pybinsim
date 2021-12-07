@@ -120,11 +120,9 @@ class InputBuffer(object):
         :return: (outputLeft, outputRight)
         """
 
-        self.processCounter += 1
-
         """""
         # Not needed anymore?
-        if block.size< self.block_size:
+        if block.size < self.block_size:
             # print('Fill up last block')
             block = np.concatenate(
                 (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
@@ -133,10 +131,14 @@ class InputBuffer(object):
         # First: Fill buffer and FDLs with current block
         if not self.processStereo:
             # print('Convolver Mono Processing')
-            return self.fill_buffer_mono(block)
+            output = self.fill_buffer_mono(block)
         else:
             # print('Convolver Stereo Processing')
-            return self.fill_buffer_stereo(block)
+            output = self.fill_buffer_stereo(block)
+
+        self.processCounter += 1
+
+        return output
 
     def close(self):
         print("Input_buffer: close")
