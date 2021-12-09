@@ -83,6 +83,9 @@ class ConvolverTorch(object):
         # Result of the ifft is stored here
         self.outputLeft = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
         self.outputRight = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputLeft_previous = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputRight_previous = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
+
 
         # Counts how often process() is called
         self.processCounter = 0
