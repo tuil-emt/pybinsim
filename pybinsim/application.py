@@ -33,7 +33,6 @@ from pybinsim.filterstorage import FilterStorage
 from pybinsim.osc_receiver import OscReceiver
 from pybinsim.pose import Pose
 from pybinsim.soundhandler import SoundHandler
-from pybinsim.input_buffer import InputBuffer
 from pybinsim.input_buffer import InputBufferMulti
 
 import timeit
@@ -139,9 +138,9 @@ class BinSim(object):
         self.block = None
         self.stream = None
 
-        self.convolverWorkers = []
-        self.convolverHP, self.ds_convolvers, self.early_convolvers, self.late_convolvers, self.input_BufferMulti, self.input_BuffersMono,\
-        self.input_BufferStereo, self.filterStorage,  self.oscReceiver, self.soundHandler = self.initialize_pybinsim()
+        #self.convolverWorkers = []
+        self.convolverHP, self.ds_convolver, self.early_convolver, self.late_convolver, self.input_Buffer,\
+        self.input_BufferHP, self.filterStorage,  self.oscReceiver, self.soundHandler = self.initialize_pybinsim()
 
 
     def __enter__(self):
@@ -175,7 +174,7 @@ class BinSim(object):
 
     def initialize_pybinsim(self):
         #self.result = np.empty([self.blockSize, 2], dtype=np.float32)
-        self.result = torch.zeros(self.blockSize, 2, dtype=torch.float32)
+        self.result = torch.zeros(2, self.blockSize, dtype=torch.float32)
 
         self.block = np.zeros(
             [self.nChannels, self.blockSize], dtype=np.float32)
@@ -217,32 +216,33 @@ class BinSim(object):
         soundHandler.request_new_sound_file(soundfile_list)
 
         # Create input buffers
-        input_BufferMulti = InputBufferMulti(self.blockSize,  self.nChannels, self.config.get('torchConvolution[cpu/cuda]'))
-        input_BufferStereo = InputBuffer(self.blockSize,  True, self.config.get('torchConvolution[cpu/cuda]'))
+        input_Buffer = InputBufferMulti(self.blockSize,  self.nChannels, self.config.get('torchConvolution[cpu/cuda]'))
+        input_BufferHP = InputBufferMulti(self.blockSize,  2, self.config.get('torchConvolution[cpu/cuda]'))
 
 
         # Create N convolvers depending on the number of wav channels
         self.log.info('Number of Channels: ' + str(self.nChannels))
-        ds_convolvers = [None] * self.nChannels
-        early_convolvers = [None] * self.nChannels
-        late_convolvers = [None] * self.nChannels
-        input_BuffersMono = [None] * self.nChannels
 
-        for n in range(self.nChannels):
-            ds_convolvers[n] = ConvolverTorch(ds_size, self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
-            early_convolvers[n] = ConvolverTorch(early_size, self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
-            late_convolvers[n] = ConvolverTorch(late_size, self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
-            input_BuffersMono[n] = InputBuffer(self.blockSize, False, self.config.get('torchConvolution[cpu/cuda]'))
+        ds_convolver = ConvolverTorch(ds_size, self.blockSize, self.nChannels,
+                                          self.config.get('enableCrossfading'),
+                                          self.config.get('torchConvolution[cpu/cuda]'))
+        early_convolver = ConvolverTorch(early_size, self.blockSize, self.nChannels,
+                                          self.config.get('enableCrossfading'),
+                                          self.config.get('torchConvolution[cpu/cuda]'))
+        late_convolver = ConvolverTorch(late_size, self.blockSize, self.nChannels,
+                                          self.config.get('enableCrossfading'),
+                                          self.config.get('torchConvolution[cpu/cuda]'))
+
 
         # HP Equalization convolver
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
             convolverHP = ConvolverTorch(self.config.get(
-                'headphone_filterSize'), self.blockSize, True, self.config.get('torchConvolution[cpu/cuda]'))
+                'headphone_filterSize'), self.blockSize, 2, False, self.config.get('torchConvolution[cpu/cuda]'))
             hpfilter = filterStorage.get_headphone_filter()
-            convolverHP.setIR(hpfilter, False)
+            convolverHP.setIR(0, hpfilter)
 
-        return convolverHP, ds_convolvers, early_convolvers, late_convolvers, input_BufferMulti, input_BuffersMono, input_BufferStereo, \
+        return convolverHP, ds_convolver, early_convolver, late_convolver, input_Buffer, input_BufferHP, \
                filterStorage, oscReceiver, soundHandler
 
     def __cleanup(self):
@@ -250,13 +250,12 @@ class BinSim(object):
         self.oscReceiver.close()
         self.stream.close()
         self.filterStorage.close()
-        self.input_BufferStereo.close()
+        self.input_Buffer.close()
+        self.input_BufferHP.close()
+        self.ds_convolver.close()
+        self.early_convolver.close()
+        self.late_convolver.close()
 
-        for n in range(self.nChannels):
-            self.ds_convolvers[n].close()
-            self.early_convolvers[n].close()
-            self.late_convolvers[n].close()
-            self.input_BuffersMono[n].close()
 
         if self.config.get('useHeadphoneFilter'):
             if self.convolverHP:
@@ -299,14 +298,13 @@ def audio_callback(binsim):
 
         if binsim.current_config.get('pauseConvolution'):
             if binsim.soundHandler.get_sound_channels() == 2:
-                binsim.result[:,0] = binsim.block[0, :]
-                binsim.result[:,1] = binsim.block[1, :]
+                binsim.result = binsim.block
             else:
                 mix = np.mean(binsim.block[:binsim.soundHandler.get_sound_channels(), :], 0)
-                binsim.result[:, 0] = mix
-                binsim.result[:, 1] = mix
+                binsim.result[0, :] = mix
+                binsim.result[1, :] = mix
         else:
-            input_buffers = binsim.input_BufferMulti.process(binsim.block)
+            input_buffers = binsim.input_Buffer.process(binsim.block)
             # Update Filters and run each convolver with the current block
             for n in range(amount_channels):
 
@@ -314,59 +312,41 @@ def audio_callback(binsim):
                 if binsim.oscReceiver.is_ds_filter_update_necessary(n):
                     ds_filterValueList = binsim.oscReceiver.get_current_ds_filter_values(n)
                     ds_filter = binsim.filterStorage.get_ds_filter(Pose.from_filterValueList(ds_filterValueList))
-                    binsim.ds_convolvers[n].setIR(ds_filter, callback.config.get('enableCrossfading'))
+                    binsim.ds_convolver.setIR(n, ds_filter)
 
                 # Get new early reverb Filter
                 if binsim.oscReceiver.is_early_filter_update_necessary(n):
                     early_filterValueList = binsim.oscReceiver.get_current_early_filter_values(n)
                     early_filter = binsim.filterStorage.get_early_filter(Pose.from_filterValueList(early_filterValueList))
-                    binsim.early_convolvers[n].setIR(early_filter, callback.config.get('enableCrossfading'))
+                    binsim.early_convolver.setIR(n, early_filter)
 
                 # Get new late reverb Filter
                 if binsim.oscReceiver.is_late_filter_update_necessary(n):
                     late_filterValueList = binsim.oscReceiver.get_current_late_filter_values(n)
                     late_filter = binsim.filterStorage.get_late_filter(Pose.from_filterValueList(late_filterValueList))
-                    binsim.late_convolvers[n].setIR(late_filter, callback.config.get('enableCrossfading'))
+                    binsim.late_convolver.setIR(n, late_filter)
 
-                #input_mono = binsim.input_BuffersMono[n].process(binsim.block[n, :])
+            left_ds, right_ds = binsim.ds_convolver.process(input_buffers)
+            left_early, right_early = binsim.early_convolver.process(input_buffers)
+            left_late, right_late = binsim.late_convolver.process(input_buffers)
 
-                #left_ds, right_ds, count = binsim.ds_convolvers[n].process(input_mono)
-                #left_early, right_early, _ = binsim.early_convolvers[n].process(input_mono)
-                #left_late, right_late, _ = binsim.late_convolvers[n].process(input_mono)
+            binsim.result[0, :] = torch.sum(torch.stack([left_ds, left_early, left_late]), keepdim=True, dim=0)
+            binsim.result[1, :] = torch.sum(torch.stack([right_ds, right_early, right_late]), keepdim=True, dim=0)
 
 
-                left_ds, right_ds, count = binsim.ds_convolvers[n].process(input_buffers[n,:])
-                left_early, right_early, _ = binsim.early_convolvers[n].process(input_buffers[n,:])
-                left_late, right_late, _ = binsim.late_convolvers[n].process(input_buffers[n,:])
 
-                left = torch.sum(torch.stack([left_ds, left_early, left_late]), keepdim=True, dim=0)
-                right = torch.sum(torch.stack([right_ds, right_early, right_late]), keepdim=True, dim=0)
-
-                #left = np.sum([left_ds, left_early, left_late], axis=0)
-                #right = np.sum([right_ds, right_early, right_late], axis=0)
-
-                # Sum results from all convolvers
-                binsim.result[:, 0] = torch.add(binsim.result[:, 0], left)
-                binsim.result[:, 1] = torch.add(binsim.result[:, 1], right)
-                """""
-                if n == 0:
-                    binsim.result[:, 0] = left
-                    binsim.result[:, 1] = right
-                else:
-                    binsim.result[:, 0] = torch.add(binsim.result[:, 0], left)
-                    binsim.result[:, 1] = torch.add(binsim.result[:, 1], right)
-                """""
             # Finally apply Headphone Filter
             if callback.config.get('useHeadphoneFilter'):
-                binsim.result[:, 0], binsim.result[:, 1], _ = \
-                    binsim.convolverHP.process(*binsim.input_BufferStereo.process(binsim.result))
+                result_buffer_left, result_buffer_right = binsim.input_BufferHP.process(binsim.result)
+                binsim.result[0, :], binsim.result[1, :] = \
+                    binsim.convolverHP.process(torch.stack([result_buffer_left, result_buffer_right], dim=0))
 
 
         # Scale data
         # binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
         binsim.result = torch.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels) * 2))
 
-        outdata[:] = binsim.result.detach().cpu().numpy()
+        outdata[:] = np.transpose(binsim.result.detach().cpu().numpy())
 
         # Report buffer underrun
         if status == 4:
@@ -382,7 +362,7 @@ def audio_callback(binsim):
         # binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
         binsim.cb_time_usage[1] = cb_time/(binsim.blockSize/binsim.sampleRate)*100
         binsim.cb_time_usage = np.roll(binsim.cb_time_usage, 1, axis=0)
-        if count % binsim.cpu_usage_update_rate == 0:
+        if binsim.ds_convolver.get_counter() % binsim.cpu_usage_update_rate == 0:
             binsim.log.info(f'Audio callback utilization Mean: {np.mean(binsim.cb_time_usage)} % - Max: {np.max(binsim.cb_time_usage)}')
 
     callback.config = binsim.config

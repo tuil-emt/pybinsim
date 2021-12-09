@@ -1,12 +1,12 @@
-soundfile signals/speech2_48000_5.wav
+soundfile signals/speech2_48000_15.wav
 blockSize 512
 ds_filterSize 256
 early_filterSize 3072
 late_filterSize 32768
 filterList brirs/filtermap_short.txt
-maxChannels 5
+maxChannels 15
 samplingRate 48000
-enableCrossfading True
+enableCrossfading False
 useHeadphoneFilter True
 headphone_filterSize 1024
 loudnessFactor 0.5

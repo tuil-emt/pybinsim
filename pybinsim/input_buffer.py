@@ -49,7 +49,7 @@ class InputBufferMulti(object):
         self.inputs = inputs
 
         # Create Input Buffers
-        self.buffer = torch.zeros(self.block_size * 2, inputs, dtype=torch.float32, device=self.torch_device)
+        self.buffer = torch.zeros(inputs, self.block_size * 2, dtype=torch.float32, device=self.torch_device)
 
         self.processCounter = 0
 
@@ -82,10 +82,10 @@ class InputBufferMulti(object):
 
         if self.processCounter > 0:
             # shift buffer
-            self.buffer[:self.block_size, :] = self.buffer[self.block_size:, :]
+            self.buffer[:, :self.block_size] = self.buffer[:, self.block_size:]
 
         # insert new block to buffer
-        self.buffer[self.block_size:, :] = torch.as_tensor(np.transpose(block), dtype=torch.float32, device=self.torch_device)
+        self.buffer[:, self.block_size:] = torch.as_tensor(block, dtype=torch.float32, device=self.torch_device)
 
         return torch.fft.rfftn(self.buffer, dim=1)
 
@@ -106,115 +106,3 @@ class InputBufferMulti(object):
     def close(self):
         print("Input_buffer: close")
 
-class InputBuffer(object):
-    """
-    blubb
-    """
-
-    def __init__(self, block_size, process_stereo,torch_settings):
-        start = default_timer()
-
-        self.log = logging.getLogger("pybinsim.input_buffer")
-        self.log.info("Input_buffer: Start Init")
-
-        # Torch Options
-        self.torch_device = torch.device(torch_settings)
-
-        # Get Basic infos
-        self.block_size = block_size
-
-
-        # Create Input Buffers
-        self.buffer = torch.zeros(self.block_size * 2, dtype=torch.float32, device=self.torch_device)
-        self.buffer2 = torch.zeros(self.block_size * 2, dtype=torch.float32, device=self.torch_device)
-
-        # Select mono or stereo processing
-        self.processStereo = process_stereo
-
-        self.processCounter = 0
-
-        end = default_timer()
-        delta = end - start
-        self.log.info("Convolver: Finished Init (took {}s)".format(delta))
-
-
-    def get_counter(self):
-        """
-        Returns processing counter
-        :return: processing counter
-        """
-        return self.processCounter
-
-    def process_nothing(self):
-        """
-        Just for testing
-        :return: None
-        """
-        self.processCounter += 1
-
-    def fill_buffer_mono(self, block):
-        """
-        Copy mono soundblock to input Buffer;
-        Transform to Freq. Domain and store result in FDLs
-        :param block: Mono sound block
-        :return: None
-        """
-
-        if self.processCounter > 0:
-            # shift buffer
-            self.buffer[:self.block_size] = self.buffer[self.block_size:]
-
-        # insert new block to buffer
-        self.buffer[self.block_size:] = torch.as_tensor(block, dtype=torch.float32, device=self.torch_device)
-
-        return torch.fft.rfft(self.buffer)
-
-    def fill_buffer_stereo(self, block):
-        """
-        Copy stereo soundblock to input Buffer1 and Buffer2;
-        Transform to Freq. Domain and store result in FDLs
-
-        :param block:
-        :return: None
-        """
-
-        if self.processCounter > 0:
-            # shift buffer
-            self.buffer[:self.block_size] = self.buffer[self.block_size:]
-            self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
-
-        self.buffer[self.block_size:] = torch.as_tensor(block[:, 0], dtype=torch.float32, device=self.torch_device)
-        self.buffer2[self.block_size:] = torch.as_tensor(block[:, 1], dtype=torch.float32, device=self.torch_device)
-
-        return torch.fft.rfft(self.buffer), torch.fft.rfft(self.buffer2)
-
-    def process(self, block):
-        """
-        Main function
-
-        :param block:
-        :return: (outputLeft, outputRight)
-        """
-
-        """""
-        # Not needed anymore?
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            block = np.concatenate(
-                (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
-        """""
-
-        # First: Fill buffer and FDLs with current block
-        if not self.processStereo:
-            # print('Convolver Mono Processing')
-            output = self.fill_buffer_mono(block)
-        else:
-            # print('Convolver Stereo Processing')
-            output = self.fill_buffer_stereo(block)
-
-        self.processCounter += 1
-
-        return output
-
-    def close(self):
-        print("Input_buffer: close")
