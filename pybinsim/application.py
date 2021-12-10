@@ -142,7 +142,6 @@ class BinSim(object):
         self.convolverHP, self.ds_convolver, self.early_convolver, self.late_convolver, self.input_Buffer,\
         self.input_BufferHP, self.filterStorage,  self.oscReceiver, self.soundHandler = self.initialize_pybinsim()
 
-
     def __enter__(self):
         return self
 
@@ -223,13 +222,13 @@ class BinSim(object):
         # Create N convolvers depending on the number of wav channels
         self.log.info('Number of Channels: ' + str(self.nChannels))
 
-        ds_convolver = ConvolverTorch(ds_size, self.blockSize, self.nChannels,
+        ds_convolver = ConvolverTorch(ds_size, self.blockSize, False, self.nChannels,
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
-        early_convolver = ConvolverTorch(early_size, self.blockSize, self.nChannels,
+        early_convolver = ConvolverTorch(early_size, self.blockSize, False, self.nChannels,
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
-        late_convolver = ConvolverTorch(late_size, self.blockSize, self.nChannels,
+        late_convolver = ConvolverTorch(late_size, self.blockSize, False, self.nChannels,
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
 
@@ -237,8 +236,9 @@ class BinSim(object):
         # HP Equalization convolver
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
-            convolverHP = ConvolverTorch(self.config.get(
-                'headphone_filterSize'), self.blockSize, 2, False, self.config.get('torchConvolution[cpu/cuda]'))
+            convolverHP = ConvolverTorch(self.config.get('headphone_filterSize'), self.blockSize, True, 2,
+                                         True,
+                                         self.config.get('torchConvolution[cpu/cuda]'))
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setIR(0, hpfilter)
 
@@ -304,7 +304,9 @@ def audio_callback(binsim):
                 binsim.result[0, :] = mix
                 binsim.result[1, :] = mix
         else:
+
             input_buffers = binsim.input_Buffer.process(binsim.block)
+
             # Update Filters and run each convolver with the current block
             for n in range(amount_channels):
 
@@ -333,14 +335,10 @@ def audio_callback(binsim):
             binsim.result[0, :] = torch.sum(torch.stack([left_ds, left_early, left_late]), keepdim=True, dim=0)
             binsim.result[1, :] = torch.sum(torch.stack([right_ds, right_early, right_late]), keepdim=True, dim=0)
 
-
-
-            # Finally apply Headphone Filter
+          # Finally apply Headphone Filter
             if callback.config.get('useHeadphoneFilter'):
-                result_buffer_left, result_buffer_right = binsim.input_BufferHP.process(binsim.result)
-                binsim.result[0, :], binsim.result[1, :] = \
-                    binsim.convolverHP.process(torch.stack([result_buffer_left, result_buffer_right], dim=0))
-
+                result_buffer = binsim.input_BufferHP.process(binsim.result)
+                binsim.result[0, :], binsim.result[1, :] = binsim.convolverHP.process(result_buffer)
 
         # Scale data
         # binsim.result = np.divide(binsim.result, float((amount_channels) * 2))

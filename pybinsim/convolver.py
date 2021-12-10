@@ -33,7 +33,7 @@ class ConvolverTorch(object):
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size, block_size, sources, interpolate, torch_settings):
+    def __init__(self, ir_size, block_size, headphoneEQ, sources, interpolate, torch_settings):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.ConvolverTorch")
@@ -47,9 +47,13 @@ class ConvolverTorch(object):
         self.block_size = block_size
         self.sources = sources
 
+        self.headphoneEQ = headphoneEQ
+        if headphoneEQ:
+            self.log.info("Convolver used for Headphone EQ")
+            self.sources = 2
+
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
-        self.LRIndex = self.IR_blocks*self.sources
 
         # Crossfade window for output blocks
         self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
@@ -143,14 +147,16 @@ class ConvolverTorch(object):
         # Fill FDL's with need data from input buffer(s)
         if self.processCounter > 0:
             # shift FDLs
-            self.left_FDL = torch.roll(self.left_FDL, 1, dims=0)
-            self.right_FDL = torch.roll(self.right_FDL, 1, dims=0)
+            self.left_FDL = torch.roll(self.left_FDL, self.sources, dims=0)
+            self.right_FDL = torch.roll(self.right_FDL, self.sources, dims=0)
 
         # copy input buffers to FDLs
-
-        self.left_FDL[:self.sources, ] = input_buffer
-        self.right_FDL[:self.sources, ] = input_buffer
-
+        if self.headphoneEQ:
+            self.left_FDL[:self.sources, ] = input_buffer[0, ]
+            self.right_FDL[:self.sources, ] = input_buffer[1, ]
+        else:
+            self.left_FDL[:self.sources, ] = input_buffer
+            self.right_FDL[:self.sources, ] = input_buffer
 
         # Save previous filters
         self.saveOldFilters()
