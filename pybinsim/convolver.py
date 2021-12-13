@@ -50,7 +50,7 @@ class ConvolverTorch(object):
         self.headphoneEQ = headphoneEQ
         if headphoneEQ:
             self.log.info("Convolver used for Headphone EQ")
-            self.sources = 2
+            self.sources = 1
 
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
