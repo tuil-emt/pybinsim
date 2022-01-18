@@ -288,7 +288,7 @@ def audio_callback(binsim):
 
             # Finally apply Headphone Filter
             if callback.config.get('useHeadphoneFilter'):
-                binsim.result[:, 0], binsim.result[:, 1] = binsim.convolverHP.process(binsim.result)
+                binsim.result[:, 0], binsim.result[:, 1], _ = binsim.convolverHP.process(binsim.result)
 
 
         # Scale data
