@@ -50,7 +50,7 @@ class ConvolverTorch(object):
         self.headphoneEQ = headphoneEQ
         if headphoneEQ:
             self.log.info("Convolver used for Headphone EQ")
-            self.sources = 2
+            self.sources = 1
 
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
@@ -85,14 +85,16 @@ class ConvolverTorch(object):
         self.resultRightFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
 
         # Result of the ifft is stored here
-        self.outputLeft = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputRight = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputLeft_previous = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputRight_previous = torch.zeros(self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputLeft = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputRight = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputLeft_previous = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputRight_previous = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
 
 
         # Counts how often process() is called
         self.processCounter = 0
+
+        self.inUse = False
 
         self.interpolate = interpolate
 
@@ -123,6 +125,8 @@ class ConvolverTorch(object):
         self.right_filters_blocked[sourceId*self.IR_blocks:(sourceId+1)*self.IR_blocks, ] = \
             torch.as_tensor(right, dtype=torch.complex64, device=self.torch_device)
 
+    def activate(self, state):
+        self.inUse = state
 
     def saveOldFilters(self):
         # Save old filters in case interpolation is needed
@@ -144,50 +148,54 @@ class ConvolverTorch(object):
         :param block:
         :return: (outputLeft, outputRight)
         """
-        # Fill FDL's with need data from input buffer(s)
-        if self.processCounter > 0:
-            # shift FDLs
-            self.left_FDL = torch.roll(self.left_FDL, self.sources, dims=0)
-            self.right_FDL = torch.roll(self.right_FDL, self.sources, dims=0)
 
-        # copy input buffers to FDLs
-        if self.headphoneEQ:
-            self.left_FDL[:self.sources, ] = input_buffer[0, ]
-            self.right_FDL[:self.sources, ] = input_buffer[1, ]
+        if not self.inUse:
+            self.process_nothing()
         else:
-            self.left_FDL[:self.sources, ] = input_buffer
-            self.right_FDL[:self.sources, ] = input_buffer
+            # Fill FDL's with need data from input buffer(s)
+            if self.processCounter > 0:
+                # shift FDLs
+                self.left_FDL = torch.roll(self.left_FDL, self.sources, dims=0)
+                self.right_FDL = torch.roll(self.right_FDL, self.sources, dims=0)
 
-        # Save previous filters
-        self.saveOldFilters()
+            # copy input buffers to FDLs
+            if self.headphoneEQ:
+                self.left_FDL[:self.sources, ] = input_buffer[0, ]
+                self.right_FDL[:self.sources, ] = input_buffer[1, ]
+            else:
+                self.left_FDL[:self.sources, ] = input_buffer
+                self.right_FDL[:self.sources, ] = input_buffer
 
-        # Second: Multiplication with IR block und accumulation
-        self.resultLeftFreq = torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
-        self.resultRightFreq = torch.sum(torch.multiply(self.right_filters_blocked, self.right_FDL), keepdim=True, dim=0)
+            # Save previous filters
+            self.saveOldFilters()
 
-
-        # Third: Transformation back to time domain
-        self.outputLeft = torch.fft.irfft(self.resultLeftFreq)[:, self.block_size:self.block_size * 2]
-        self.outputRight = torch.fft.irfft(self.resultRightFreq)[:, self.block_size:self.block_size * 2]
-
-        if self.interpolate:
-            self.resultLeftFreqPrevious = torch.sum(torch.multiply(self.left_previous_filters_blocked, self.left_FDL),
-                                            keepdim=True, dim=0)
-            self.resultRightFreqPrevious = torch.sum(torch.multiply(self.right_previous_filters_blocked, self.right_FDL),
-                                             keepdim=True, dim=0)
-
-            self.outputLeft_previous = torch.fft.irfft(self.resultLeftFreqPrevious)[:, self.block_size:self.block_size * 2]
-            self.outputRight_previous = torch.fft.irfft(self.resultRightFreqPrevious)[:, self.block_size:self.block_size * 2]
+            # Second: Multiplication with IR block und accumulation
+            self.resultLeftFreq = torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
+            self.resultRightFreq = torch.sum(torch.multiply(self.right_filters_blocked, self.right_FDL), keepdim=True, dim=0)
 
 
-            # fade over full block size
-            self.outputLeft = torch.add(torch.multiply(self.outputLeft, self.crossFadeIn),
-                                    torch.multiply(self.outputLeft_previous, self.crossFadeOut))
+            # Third: Transformation back to time domain
+            self.outputLeft = torch.fft.irfft(self.resultLeftFreq)[:, self.block_size:self.block_size * 2]
+            self.outputRight = torch.fft.irfft(self.resultRightFreq)[:, self.block_size:self.block_size * 2]
 
-            self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
-                                     torch.multiply(self.outputRight_previous, self.crossFadeOut))
+            if self.interpolate:
+                self.resultLeftFreqPrevious = torch.sum(torch.multiply(self.left_previous_filters_blocked, self.left_FDL),
+                                                keepdim=True, dim=0)
+                self.resultRightFreqPrevious = torch.sum(torch.multiply(self.right_previous_filters_blocked, self.right_FDL),
+                                                 keepdim=True, dim=0)
 
-        self.processCounter += 1
+                self.outputLeft_previous = torch.fft.irfft(self.resultLeftFreqPrevious)[:, self.block_size:self.block_size * 2]
+                self.outputRight_previous = torch.fft.irfft(self.resultRightFreqPrevious)[:, self.block_size:self.block_size * 2]
+
+
+                # fade over full block size
+                self.outputLeft = torch.add(torch.multiply(self.outputLeft, self.crossFadeIn),
+                                        torch.multiply(self.outputLeft_previous, self.crossFadeOut))
+
+                self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
+                                         torch.multiply(self.outputRight_previous, self.crossFadeOut))
+
+            self.processCounter += 1
 
         #return self.outputLeft.detach().cpu().numpy(), self.outputRight.detach().cpu().numpy(), self.processCounter
         return self.outputLeft, self.outputRight

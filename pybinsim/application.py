@@ -66,7 +66,7 @@ class BinSimConfig(object):
                                   'filterList': 'brirs/filter_list_kemar5.txt',
                                   'enableCrossfading': False,
                                   'useHeadphoneFilter': False,
-                                  'headphone_filterSize': 4096,
+                                  'headphone_filterSize': 1024,
                                   'loudnessFactor': float(1),
                                   'maxChannels': 8,
                                   'samplingRate': 48000,
@@ -74,7 +74,10 @@ class BinSimConfig(object):
                                   'pauseConvolution': False,
                                   'pauseAudioPlayback': False,
                                   'torchConvolution[cpu/cuda]': 'cuda',
-                                  'torchStorage[cpu/cuda]': 'cuda'}
+                                  'torchStorage[cpu/cuda]': 'cuda',
+                                  'ds_convolverActive': False,
+                                  'early_convolverActive': True,
+                                  'late_convolverActive': True}
 
     def read_from_file(self, filepath):
         config = open(filepath, 'r')
@@ -152,7 +155,7 @@ class BinSim(object):
         self.log.info("BinSim: stream_start")
         try:
             self.stream = sd.OutputStream(samplerate=self.sampleRate,
-                                          dtype=np.float32,
+                                          dtype='float32',
                                           channels=2,
                                           latency="low",
                                           blocksize=self.blockSize,
@@ -232,6 +235,9 @@ class BinSim(object):
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
 
+        ds_convolver.activate(self.config.get('ds_convolverActive'))
+        early_convolver.activate(self.config.get('early_convolverActive'))
+        late_convolver.activate(self.config.get('late_convolverActive'))
 
         # HP Equalization convolver
         convolverHP = None
@@ -239,6 +245,7 @@ class BinSim(object):
             convolverHP = ConvolverTorch(self.config.get('headphone_filterSize'), self.blockSize, True, 2,
                                          True,
                                          self.config.get('torchConvolution[cpu/cuda]'))
+            convolverHP.activate(True)
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setIR(0, hpfilter)
 
@@ -342,7 +349,7 @@ def audio_callback(binsim):
 
         # Scale data
         # binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
-        binsim.result = torch.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels) * 2))
+        binsim.result = torch.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels)))
 
         outdata[:] = np.transpose(binsim.result.detach().cpu().numpy())
 

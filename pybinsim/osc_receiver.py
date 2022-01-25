@@ -161,6 +161,7 @@ class OscReceiver(object):
         :param args:
         :return:
         """
+
         current_channel = channel
         key_slice = self.select_slice(identifier)
 
@@ -233,6 +234,24 @@ class OscReceiver(object):
         osc_thread = threading.Thread(target=self.server.serve_forever)
         osc_thread.daemon = True
         osc_thread.start()
+
+        self.log.info("Serving on {}".format(self.server2.server_address))
+
+        osc_thread2 = threading.Thread(target=self.server2.serve_forever)
+        osc_thread2.daemon = True
+        osc_thread2.start()
+
+        self.log.info("Serving on {}".format(self.server3.server_address))
+
+        osc_thread3 = threading.Thread(target=self.server3.serve_forever)
+        osc_thread3.daemon = True
+        osc_thread3.start()
+
+        self.log.info("Serving on {}".format(self.server4.server_address))
+
+        osc_thread4 = threading.Thread(target=self.server4.serve_forever)
+        osc_thread4.daemon = True
+        osc_thread4.start()
 
     def is_ds_filter_update_necessary(self, channel):
         """ Check if there is a new filter for channel """
