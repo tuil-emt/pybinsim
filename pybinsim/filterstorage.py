@@ -52,8 +52,6 @@ class Filter(object):
         ir_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
         self.IR_left_blocked = torch.as_tensor(ir_left_blocked, dtype=torch.float32, device=self.torch_device)
         self.IR_right_blocked = torch.as_tensor(ir_right_blocked, dtype=torch.float32, device=self.torch_device)
-        self.TF_left_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
-        self.TF_right_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
 
         self.filename = filename
         
@@ -85,6 +83,9 @@ class Filter(object):
 
     def storeInFDomain(self):
 
+        self.TF_left_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
+        self.TF_right_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
+
         self.TF_left_blocked = torch.fft.rfft(self.IR_left_blocked, dim=1, n=self.block_size*2)
         self.TF_right_blocked = torch.fft.rfft(self.IR_right_blocked, dim=1, n=self.block_size*2)
         #print(np.shape(self.TF_right_blocked))
@@ -98,10 +99,10 @@ class Filter(object):
     def getFilterFD(self):
         if not self.fd_available:
             self.log.warning("FilterStorage: No frequency domain filter available!")
-            #left = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
-            #right = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
-            left = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
-            right = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
+            left = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
+            right = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
+            #left = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
+            #right = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
         else:
             left = self.TF_left_blocked
             right = self.TF_right_blocked
