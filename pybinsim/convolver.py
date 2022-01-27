@@ -48,9 +48,9 @@ class ConvolverTorch(object):
         self.sources = sources
 
         self.headphoneEQ = headphoneEQ
-        if headphoneEQ:
+        if self.headphoneEQ:
             self.log.info("Convolver used for Headphone EQ")
-            self.sources = 1
+            self.sources = 2
 
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
@@ -62,7 +62,7 @@ class ConvolverTorch(object):
         self.crossFadeOut = torch.as_tensor(self.crossFadeOut, dtype=torch.float32, device=self.torch_device)
         self.crossFadeIn = torch.as_tensor(np.copy(self.crossFadeIn), dtype=torch.float32, device=self.torch_device)
 
-        # Filter format: [nBlocks*sources*2,blockSize*2]
+        # Filter format: [nBlocks*sources,blockSize*2]
         self.left_filters_blocked = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
         self.right_filters_blocked = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
@@ -85,6 +85,7 @@ class ConvolverTorch(object):
         self.resultRightFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
 
         # Result of the ifft is stored here
+        self.outputEmpty = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
         self.outputLeft = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
         self.outputRight = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
         self.outputLeft_previous = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
@@ -120,9 +121,9 @@ class ConvolverTorch(object):
         """
 
         left, right = current_filter.getFilterFD()
-        self.left_filters_blocked[sourceId*self.IR_blocks:(sourceId+1)*self.IR_blocks, ] = \
+        self.left_filters_blocked[sourceId::self.sources, ] = \
             torch.as_tensor(left, dtype=torch.complex64, device=self.torch_device)
-        self.right_filters_blocked[sourceId*self.IR_blocks:(sourceId+1)*self.IR_blocks, ] = \
+        self.right_filters_blocked[sourceId::self.sources, ] = \
             torch.as_tensor(right, dtype=torch.complex64, device=self.torch_device)
 
     def activate(self, state):
@@ -133,13 +134,15 @@ class ConvolverTorch(object):
         self.left_previous_filters_blocked = self.left_filters_blocked
         self.right_previous_filters_blocked = self.right_filters_blocked
 
-
     def process_nothing(self):
         """
         Just for testing
         :return: None
         """
-        self.processCounter += 1
+
+        self.outputLeft = self.outputEmpty
+        self.outputRight = self.outputEmpty
+
 
     def process(self, input_buffer):
         """
@@ -170,13 +173,14 @@ class ConvolverTorch(object):
             self.saveOldFilters()
 
             # Second: Multiplication with IR block und accumulation
-            self.resultLeftFreq = torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
+            self.resultLeftFreq= torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
             self.resultRightFreq = torch.sum(torch.multiply(self.right_filters_blocked, self.right_FDL), keepdim=True, dim=0)
 
 
             # Third: Transformation back to time domain
             self.outputLeft = torch.fft.irfft(self.resultLeftFreq)[:, self.block_size:self.block_size * 2]
             self.outputRight = torch.fft.irfft(self.resultRightFreq)[:, self.block_size:self.block_size * 2]
+
 
             if self.interpolate:
                 self.resultLeftFreqPrevious = torch.sum(torch.multiply(self.left_previous_filters_blocked, self.left_FDL),
@@ -195,11 +199,11 @@ class ConvolverTorch(object):
                 self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
                                          torch.multiply(self.outputRight_previous, self.crossFadeOut))
 
-            self.processCounter += 1
+        self.processCounter += 1
 
-        #return self.outputLeft.detach().cpu().numpy(), self.outputRight.detach().cpu().numpy(), self.processCounter
         return self.outputLeft, self.outputRight
 
     def close(self):
-        print("Convolver: close")
+        pass
+        #print("Convolver: close")
         # TODO: do something here?

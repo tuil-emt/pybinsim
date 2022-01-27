@@ -49,7 +49,7 @@ class InputBufferMulti(object):
         self.inputs = inputs
 
         # Create Input Buffers
-        self.buffer = torch.zeros(inputs, self.block_size * 2, dtype=torch.float32, device=self.torch_device)
+        self.buffer = torch.zeros(self.inputs, self.block_size * 2, dtype=torch.float32, device=self.torch_device)
 
         self.processCounter = 0
 
@@ -96,6 +96,10 @@ class InputBufferMulti(object):
         :param block:
         :return: (outputLeft, outputRight)
         """
+        #print(block.shape[0])
+        #if block.shape[1] < self.block_size:
+        #   print("block to small - should not happen")
+            #block = np.concatenate((block, np.zeros(self.inputs, self.block_size-block.size(dim=1))), 1)
 
         output = self.fill_buffer(block)
 

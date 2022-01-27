@@ -277,13 +277,13 @@ def audio_callback(binsim):
     def callback(outdata, frame_count, time_info, status):
         # print("python-sounddevice callback")
 
-        cb_start = timeit.default_timer()
-        #cb_start = time.process_time()
-        count = 0
+        debug = 'pydevd' in sys.modules
+        if debug:
+            import pydevd
+            pydevd.settrace(suspend=False, trace_only_current_thread=True)
 
-        if "debugpy" in sys.modules:
-            import debugpy
-            debugpy.debug_this_thread()
+        cb_start = timeit.default_timer()
+        count = 0
 
         # Update config
         binsim.current_config = binsim.oscReceiver.get_current_config()
@@ -353,7 +353,7 @@ def audio_callback(binsim):
 
         outdata[:] = np.transpose(binsim.result.detach().cpu().numpy())
 
-        # Report buffer underrun
+        # Report buffer underrun - Still working with sounddevice package?
         if status == 4:
             binsim.log.warn('Output buffer underrun occurred')
 
@@ -362,7 +362,6 @@ def audio_callback(binsim):
             binsim.log.warn('Clipping occurred: Adjust loudnessFactor!')
 
         cb_end = timeit.default_timer()
-        #cb_end = time.process_time()
         cb_time = cb_end - cb_start
         # binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
         binsim.cb_time_usage[1] = cb_time/(binsim.blockSize/binsim.sampleRate)*100
