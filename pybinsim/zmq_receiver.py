@@ -74,7 +74,7 @@ class ZmqReceiver(object):
         self.zmq_thread.start()
 
     # NOTE: The following protocols have been tested
-    # TCP - slow, reliable, distributed supports pretty much all patterns
+    # TCP - slow, reliable, distributed, supports pretty much all patterns
     # IPC - very fast, reliable, same system only, supports pretty much all patterns
     # UDP - fast, maybe unreliable, distributed, supports only DISH-RADIO pattern
     #
@@ -100,6 +100,7 @@ class ZmqReceiver(object):
             zmq_socket = zmq_context.socket(zmq.ROUTER)
 
         # bind address should either look something like this if using tcp/udp
+        # This could be simplified by adding port directly to ip/addr string
         # bind_addr = 'tcp://127.0.0.1:10001'
         # or like this if using ipc (this points to a file which may or may not yet exist)
         # bind_addr = 'ipc://./_ipc'

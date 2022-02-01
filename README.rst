@@ -19,7 +19,8 @@ Assuming you are using the default command line
 python
 
 ::
-    $ <PathToPython >= 3.6> -m venv venv
+
+    $ <PathToPython >= 3.8> -m venv venv
     $ venv/Scripts/activate.bat
     $ pip install pybinsim
 
@@ -29,7 +30,8 @@ For Powershell, the activation command is `venv/Scripts/Activate.ps1`.
 conda
 
 ::
-    $ conda create --name binsim python=3.6 numpy
+
+    $ conda create --name binsim python=3.8 numpy
     $ conda activate binsim
     $ pip install pybinsim
 
@@ -55,7 +57,8 @@ For Fedora
 python
 
 ::
-    $ <PathToPython >= 3.6> -m venv venv
+
+    $ <PathToPython >= 3.8> -m venv venv
     $ source venv/bin/activate
     $ pip install pybinsim
 
@@ -63,7 +66,8 @@ python
 conda
 
 ::
-    $ conda create --name binsim python=3.6 numpy
+
+    $ conda create --name binsim python=3.8 numpy
     $ conda activate binsim
     $ pip install pybinsim
     
@@ -146,7 +150,7 @@ pauseConvolution:
 pauseAudioPlayback:
     Audio playback is paused
 
-OSC Messages and filter lists:
+ZMQ Messages and filter lists:
 ------------------------------
 
 Example lines from filter list:
@@ -161,57 +165,57 @@ Example lines from filter list:
 Lines with the prefix DSFILTER,EARLYFILTER and LATEFILTER contain a 'filter key' which consist of 6 or 9 positive numbers. These numbers
 can be arbitrarily assigned to suit your use case. They are used to tell pyBinSim which filter to apply.
 The filter behind the prefix HPFILTER will be loaded and applied automatically when useHeadphoneFilter == True.
-Lines which start with DSFILTER,EARLYFILTER or LATEFILTE have to be called via OSC commands to become active.
+Lines which start with DSFILTER,EARLYFILTER or LATEFILTE have to be called via ZMQ commands to become active.
 To activate a DSFILTER for the third channel of your wav file you have to send the the identifier
 '/pyBinSim_ds_Filter', followed by a 2 (corresponding to the third channel) and followed by the nine 9 key numbers from the filter list
-to the pc where pyBinSim runs (UDP, port 10000):
+to the pc where pyBinSim runs (protocol and address are configurable, defaults to tcp://127.0.0.1:10001):
 
 ::
 
-    /pyBinSim_ds_Filter 2 165 2 0 0 0 0 0 0 0
+    ['/pyBinSim_ds_Filter', 2, 165, 2, 0, 0, 0, 0, 0, 0, 0]
 
 When you want to apply an early filter
 
 ::
 
-    /pyBinSim_early_Filter 2 0 2 0 0 0 0 0 0 0
+    ['/pyBinSim_early_Filter', 2, 0, 2, 0, 0, 0, 0, 0, 0, 0]
 
 
 When you want to apply a late filter
 
 ::
 
-    /pyBinSim_late_Filter 2 0 2 0 0 0 0 0 0 0
+    ['/pyBinSim_late_Filter', 2, 0, 2, 0, 0, 0, 0, 0, 0, 0]
       
         
 When you want to play another sound file you send:
 
 ::
 
-    /pyBinSimFile folder/file_new.wav
+    ['/pyBinSimFile', 'folder/file_new.wav']
 
 Or a sound file list:
 
 ::
 
-    /pyBinSimFile folder/file_1.wav#folder/file_2.wav
+    ['/pyBinSimFile', 'folder/file_1.wav#folder/file_2.wav']
 
 The audiofile has to be located on the pc where pyBinSim runs. Files are not transmitted over network.
 
-Further OSC Messages:
+Further ZMQ Messages:
 ------------------------------
 
 Pause audio playback. Send 'True' or 'False' (as string, not bool)
 
 ::
 
-    /pyBinSimPauseAudioPlayback 'True'
+    ['/pyBinSimPauseAudioPlayback, 'True']
 
 Bypass convolution. Send 'True' or 'False' (as string, not bool)
 
 ::
 
-    /pyBinSimPauseConvolution 'True'
+    ['/pyBinSimPauseConvolution', 'True']
 
 
 
