@@ -63,7 +63,9 @@ class BinSimConfig(object):
                                   'ds_filterSize': 512,
                                   'early_filterSize': 4096,
                                   'late_filterSize': 16384,
+                                  'filterSource': 'mat',
                                   'filterList': 'brirs/filter_list_kemar5.txt',
+                                  'filterDatabase': 'brirs/database.mat',
                                   'enableCrossfading': False,
                                   'useHeadphoneFilter': False,
                                   'headphone_filterSize': 1024,
@@ -197,7 +199,9 @@ class BinSim(object):
 
         # Create FilterStorage
         filterStorage = FilterStorage(self.blockSize,
+                                      self.config.get('filterSource'),
                                       self.config.get('filterList'),
+                                      self.config.get('filterDatabase'),
                                       self.config.get('torchStorage[cpu/cuda]'),
                                       self.config.get('useHeadphoneFilter'),
                                       self.config.get('headphone_filterSize'),

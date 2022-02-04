@@ -33,6 +33,7 @@ import time
 
 from pybinsim.pose import Pose
 from pybinsim.utility import total_size
+import scipy.io as sio
 
 class Filter(object):
 
@@ -101,8 +102,6 @@ class Filter(object):
             self.log.warning("FilterStorage: No frequency domain filter available!")
             left = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
             right = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
-            #left = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
-            #right = torch.zeros((self.ir_blocks, self.block_size), dtype=torch.complex64)
         else:
             left = self.TF_left_blocked
             right = self.TF_right_blocked
@@ -115,12 +114,13 @@ class FilterType(enum.Enum):
     early_Filter = 2
     late_Filter = 3
     headphone_Filter = 4
+    directivity_Filter = 5
 
 class FilterStorage(object):
     """ Class for storing all filters mentioned in the filter list """
 
     #def __init__(self, irSize, block_size, filter_list_name):
-    def __init__(self, block_size, filter_list_name, torch_settings, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
+    def __init__(self, block_size, filter_source, filter_list_name, filter_database, torch_settings, useHeadphoneFilter = False, headphoneFilterSize = 0, ds_filterSize = 0, early_filterSize = 0, late_filterSize = 0):
 
         self.log = logging.getLogger("pybinsim.FilterStorage")
         self.log.info("FilterStorage: init")
@@ -157,10 +157,19 @@ class FilterStorage(object):
             self.headPhoneFilterSize = headphoneFilterSize
             self.headphone_ir_blocks = headphoneFilterSize // block_size
 
+        self.filter_source = filter_source
         self.filter_list_path = filter_list_name
-        self.filter_list = open(self.filter_list_path, 'r')
+        self.filter_database = filter_database
 
+        self.matfile = None
         self.headphone_filter = None
+        self.filter_list = None
+
+        if self.filter_source == 'wav':
+            self.filter_list = open(self.filter_list_path, 'r')
+        elif self.filter_source == 'mat':
+            self.matfile = sio.loadmat(filter_database)
+
 
         # format: [key,{filter}]
         self.ds_filter_dict = {}
@@ -170,6 +179,12 @@ class FilterStorage(object):
         # Start to load filters
         self.load_filters()
 
+    def parse_matfile(self):
+        rows = self.matfile['data'].shape[1]
+
+        for row in rows:
+            pass
+8
     def parse_filter_list(self):
         """
         Generator for filter list lines
@@ -237,7 +252,11 @@ class FilterStorage(object):
 
         self.log.info("Start loading filters...")
         start = time.time()
-        parsed_filter_list = list(self.parse_filter_list())
+
+        if self.filter_source == 'wav':
+            parsed_filter_list = list(self.parse_filter_list())
+        elif self.filter_source == 'mat':
+            parsed_filter_list = list(self.parse_matfile())
 
 #        # check if all files are available
 #        are_files_missing = False
