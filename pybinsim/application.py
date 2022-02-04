@@ -186,6 +186,7 @@ class BinSim(object):
         ds_size = self.config.get('ds_filterSize')
         early_size = self.config.get('early_filterSize')
         late_size = self.config.get('late_filterSize')
+        sd_size = self.config.get('directivity_filterSize')
 
         if ds_size < self.blockSize:
             ds_size = self.blockSize
@@ -196,6 +197,9 @@ class BinSim(object):
         if late_size < self.blockSize:
             late_size = self.blockSize
             self.log.info('Block size smaller than late filter size: Zero Padding LATE filter')
+        if sd_size < self.blockSize:
+            sd_size = self.blockSize
+            self.log.info('Block size smaller than directivty filter size: Zero Padding sd filter')
 
         # Create FilterStorage
         filterStorage = FilterStorage(self.blockSize,
@@ -207,7 +211,8 @@ class BinSim(object):
                                       self.config.get('headphone_filterSize'),
                                       ds_size,
                                       early_size,
-                                      late_size)
+                                      late_size,
+                                      sd_size)
 
         # Start an oscReceiver
         oscReceiver = OscReceiver(self.config)

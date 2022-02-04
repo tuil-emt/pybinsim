@@ -32,6 +32,7 @@ class Pose:
     def from_filterValueList(filter_value_list):
 
         # 'old' format: orientation - position
+        '''
         if len(filter_value_list) == 6:
             orientation = Orientation(
                 filter_value_list[0], filter_value_list[1], filter_value_list[2])
@@ -39,6 +40,7 @@ class Pose:
                 filter_value_list[3], filter_value_list[4], filter_value_list[5])
 
             return Pose(orientation, position)
+        '''
 
         # 'new' format: orientation - position - custom
         if len(filter_value_list) == 9:
