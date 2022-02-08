@@ -33,7 +33,7 @@ setup(
     install_requires=[
         "numpy ~= 1.19.2",
         "sounddevice ~= 0.4.1",
-        "pyfftw ~= 0.12.0",
+        "torch ~= 1.10.2",
         "pyserial ~= 3.4",
         "pytest ~= 6.1.1",
         "python-osc ~= 1.7.4",
