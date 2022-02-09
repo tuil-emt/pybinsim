@@ -63,6 +63,7 @@ class BinSimConfig(object):
                                   'ds_filterSize': 512,
                                   'early_filterSize': 4096,
                                   'late_filterSize': 16384,
+                                  'directivity_filterSize': 512,
                                   'filterSource': 'mat',
                                   'filterList': 'brirs/filter_list_kemar5.txt',
                                   'filterDatabase': 'brirs/database.mat',

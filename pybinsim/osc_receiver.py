@@ -53,11 +53,14 @@ class OscReceiver(object):
         self.early_filters_updated = [True] * self.maxChannels
         self.late_filters_updated = [True] * self.maxChannels
         
-        self.default_filter_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
+        #self.default_filter_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
+        self.default_filter_value = np.zeros((1, 18))
+        self.default_sd_filter_value = np.zeros((1, 12))
 
         self.valueList_ds_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
         self.valueList_early_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
         self.valueList_late_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
+        self.valueList_sd_filter = np.tile(self.default_sd_filter_value, [self.maxChannels, 1])
 
 
         # self.valueList = [()] * self.maxChannels
