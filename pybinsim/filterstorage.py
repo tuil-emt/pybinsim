@@ -144,7 +144,7 @@ class FilterStorage(object):
         self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size, torch_settings)
         self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size, torch_settings)
         self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size, torch_settings)
-        self.default_sd_filter = Filter(np.zeros((self.sd_size, 2), dtype='float32'), self.late_blocks,
+        self.default_sd_filter = Filter(np.zeros((self.sd_size, 2), dtype='float32'), self.sd_blocks,
                                           self.block_size, torch_settings)
 
         self.default_ds_filter.storeInFDomain()
@@ -168,6 +168,7 @@ class FilterStorage(object):
         self.filter_list_path = filter_list_name
         self.filter_database = filter_database
 
+        self.matvarname = 'binsim'
         self.matfile = None
         self.headphone_filter = None
         self.filter_list = None
@@ -188,31 +189,31 @@ class FilterStorage(object):
 
 
     def parse_and_load_matfile(self):
-        matvarname='data'
-        rows = self.matfile[matvarname].shape[1]
+
+        rows = self.matfile[self.matvarname].shape[1]
 
         for row in range(rows):
 
             #print('Parse mat row')
             # Parse headphone filter
-            if self.matfile[matvarname]['type'][0][row] == 'HP':
+            if self.matfile[self.matvarname]['type'][0][row] == 'HP':
                 filter_type = FilterType.headphone_Filter
-                self.headphone_filter = Filter(self.check_filter(filter_type, self.matfile[matvarname]['filter'][0][row]),
+                self.headphone_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
                                                self.headphone_ir_blocks, self.block_size, self.torch_settings)
                 self.headphone_filter.storeInFDomain()
                 continue
 
             # Parse Source directiviy filters
-            if self.matfile[matvarname]['type'][0][row] == 'SD':
+            if self.matfile[self.matvarname]['type'][0][row] == 'SD':
                 filter_type = FilterType.directivity_Filter
-                filter_value_list = np.concatenate([self.matfile[matvarname]['sourceOrientation'][0][row],
-                                    self.matfile[matvarname]['sourcePostion'][0][row], #typo!
-                                    self.matfile[matvarname]['custom'][0][row],])
+                filter_value_list = np.concatenate([self.matfile[self.matvarname]['sourceOrientation'][0][row],
+                                    self.matfile[self.matvarname]['sourcePosition'][0][row],
+                                    self.matfile[self.matvarname]['custom'][0][row]])
 
                 filter_pose = SourcePose.from_filterValueList(filter_value_list)
 
-                current_filter = Filter(self.check_filter(filter_type, self.matfile[matvarname]['filter'][0][row]),
-                                        self.ds_blocks, self.block_size,
+                current_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
+                                        self.sd_blocks, self.block_size,
                                         self.torch_settings)
 
                 current_filter.storeInFDomain()
@@ -224,18 +225,18 @@ class FilterStorage(object):
                 continue
 
             # Parse all other filters
-            filter_value_list = np.concatenate([self.matfile[matvarname]['listenerOrientation'][0][row],
-                                self.matfile[matvarname]['listenerPostion'][0][row],
-                                self.matfile[matvarname]['sourceOrientation'][0][row],
-                                self.matfile[matvarname]['sourcePostion'][0][row],
-                                self.matfile[matvarname]['custom'][0][row]])
+            filter_value_list = np.concatenate([self.matfile[self.matvarname]['listenerOrientation'][0][row],
+                                self.matfile[self.matvarname]['listenerPosition'][0][row],
+                                self.matfile[self.matvarname]['sourceOrientation'][0][row],
+                                self.matfile[self.matvarname]['sourcePosition'][0][row],
+                                self.matfile[self.matvarname]['custom'][0][row]])
 
             filter_pose = Pose.from_filterValueList(filter_value_list)
 
-            if self.matfile[matvarname]['type'][0][row] == 'DS':
+            if self.matfile[self.matvarname]['type'][0][row] == 'DS':
                 filter_type = FilterType.ds_Filter
 
-                current_filter = Filter(self.check_filter(filter_type, self.matfile[matvarname]['filter'][0][row]),
+                current_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
                                         self.ds_blocks, self.block_size,
                                         self.torch_settings)
 
@@ -245,11 +246,11 @@ class FilterStorage(object):
                 key = filter_pose.create_key()
                 self.ds_filter_dict.update({key: current_filter})
 
-            elif self.matfile[matvarname]['type'][0][row] == 'ER':
+            elif self.matfile[self.matvarname]['type'][0][row] == 'ER':
                 filter_type = FilterType.early_Filter
 
-                current_filter = Filter(self.check_filter(filter_type, self.matfile[matvarname]['filter'][0][row]),
-                                        self.ds_blocks, self.block_size,
+                current_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
+                                        self.early_blocks, self.block_size,
                                         self.torch_settings)
 
                 current_filter.storeInFDomain()
@@ -258,11 +259,11 @@ class FilterStorage(object):
                 key = filter_pose.create_key()
                 self.early_filter_dict.update({key: current_filter})
 
-            elif self.matfile[matvarname]['type'][0][row] == 'LA':
+            elif self.matfile[self.matvarname]['type'][0][row] == 'LR':
                 filter_type = FilterType.late_Filter
 
-                current_filter = Filter(self.check_filter(filter_type, self.matfile[matvarname]['filter'][0][row]),
-                                        self.ds_blocks, self.block_size,
+                current_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
+                                        self.late_blocks, self.block_size,
                                         self.torch_settings)
 
                 current_filter.storeInFDomain()

@@ -1,11 +1,11 @@
 soundfile signals/speech2_48000_mono.wav
 blockSize 512
-ds_filterSize 512
-early_filterSize 512
-late_filterSize 512
+ds_filterSize 256
+early_filterSize 4096
+late_filterSize 12288
 directivity_filterSize 512
 filterSource mat
-filterDatabase brirs/example_binsim_struct.mat
+filterDatabase brirs/example_flters_lukas.mat
 filterList brirs/filtermap_short.txt
 maxChannels 1
 samplingRate 48000

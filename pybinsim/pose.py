@@ -12,12 +12,12 @@ class Position(namedtuple('Position', ['x', 'y', 'z'])):
     pass
 
 
-class Custom(namedtuple('CustomValues', ['a', 'b', 'c', 'd', 'e', 'f'])):
+class Custom(namedtuple('CustomValues', ['a', 'b', 'c'])):
     pass
 
 
 class Pose:
-    def __init__(self, listener_orientation, listener_position, custom=Custom(0, 0, 0, 0 ,0 ,0),
+    def __init__(self, listener_orientation, listener_position, custom=Custom(0, 0, 0,),
                  source_orientation=Orientation(0, 0, 0), source_position=Position(0, 0, 0)):
         self.listener_orientation = listener_orientation
         self.listener_position = listener_position
@@ -36,7 +36,7 @@ class Pose:
     def from_filterValueList(filter_value_list):
 
         # format: listener_orientation - listener_position - custom
-        if len(filter_value_list) == 12:
+        if len(filter_value_list) == 9:
             listener_orientation = Orientation(
                 filter_value_list[0], filter_value_list[1], filter_value_list[2])
             listener_position = Position(
@@ -47,7 +47,7 @@ class Pose:
             return Pose(listener_orientation, listener_position, custom)
 
         # format: listener_orientation - listener_position - custom - source_orientation - source_position
-        if len(filter_value_list) == 18:
+        if len(filter_value_list) == 15:
             listener_orientation = Orientation(
                 filter_value_list[0], filter_value_list[1], filter_value_list[2])
             listener_position = Position(
@@ -57,8 +57,7 @@ class Pose:
             source_position = Position(
                 filter_value_list[9], filter_value_list[10], filter_value_list[11])
             custom = Custom(
-                filter_value_list[12], filter_value_list[13], filter_value_list[14],
-                filter_value_list[15], filter_value_list[16], filter_value_list[17],)
+                filter_value_list[12], filter_value_list[13], filter_value_list[14])
 
             return Pose(listener_orientation, listener_position, custom, source_orientation, source_position)
 
@@ -68,7 +67,7 @@ class Pose:
 
 class SourcePose:
     def __init__(self, source_orientation=Orientation(0, 0, 0),
-                 source_position=Position(0, 0, 0), custom=Custom(0, 0, 0 ,0 ,0 ,0)):
+                 source_position=Position(0, 0, 0), custom=Custom(0, 0, 0)):
         self.source_orientation = source_orientation
         self.source_position = source_position
         self.custom = custom
@@ -83,14 +82,13 @@ class SourcePose:
     def from_filterValueList(filter_value_list):
 
         # 'new' format: source_orientation - source_position - custom
-        if len(filter_value_list) == 12:
+        if len(filter_value_list) == 9:
             source_orientation = Orientation(
                 filter_value_list[0], filter_value_list[1], filter_value_list[2])
             source_position = Position(
                 filter_value_list[3], filter_value_list[4], filter_value_list[5])
             custom = Custom(
-                filter_value_list[6], filter_value_list[7], filter_value_list[8],
-                filter_value_list[9], filter_value_list[10], filter_value_list[11])
+                filter_value_list[6], filter_value_list[7], filter_value_list[8])
 
             return SourcePose(source_orientation, source_position, custom)
 

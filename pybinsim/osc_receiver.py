@@ -52,10 +52,11 @@ class OscReceiver(object):
         self.ds_filters_updated = [True] * self.maxChannels
         self.early_filters_updated = [True] * self.maxChannels
         self.late_filters_updated = [True] * self.maxChannels
+        self.sd_filters_updated = [True] * self.maxChannels
         
         #self.default_filter_value = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
-        self.default_filter_value = np.zeros((1, 18))
-        self.default_sd_filter_value = np.zeros((1, 12))
+        self.default_filter_value = np.zeros((1, 15))
+        self.default_sd_filter_value = np.zeros((1, 9))
 
         self.valueList_ds_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
         self.valueList_early_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
@@ -74,6 +75,9 @@ class OscReceiver(object):
         osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Orientation", self.handle_ds_filter_input)
         osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Position", self.handle_ds_filter_input)
         osc_dispatcher_ds.map("/pyBinSim_ds_Filter_Custom", self.handle_ds_filter_input)
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter_sourceOrientation", self.handle_ds_filter_input)
+        osc_dispatcher_ds.map("/pyBinSim_ds_Filter_sourcePosition", self.handle_ds_filter_input)
+
 
         osc_dispatcher_early = dispatcher.Dispatcher()
         osc_dispatcher_early.map("/pyBinSim_early_Filter", self.handle_early_filter_input)
@@ -81,6 +85,8 @@ class OscReceiver(object):
         osc_dispatcher_early.map("/pyBinSim_early_Filter_Orientation", self.handle_early_filter_input)
         osc_dispatcher_early.map("/pyBinSim_early_Filter_Position", self.handle_early_filter_input)
         osc_dispatcher_early.map("/pyBinSim_early_Filter_Custom", self.handle_early_filter_input)
+        osc_dispatcher_early.map("/pyBinSim_early_Filter_sourceOrientation", self.handle_early_filter_input)
+        osc_dispatcher_early.map("/pyBinSim_early_Filter_sourcePosition", self.handle_early_filter_input)
 
         osc_dispatcher_late = dispatcher.Dispatcher()
         osc_dispatcher_late.map("/pyBinSim_late_Filter", self.handle_late_filter_input)
@@ -88,12 +94,15 @@ class OscReceiver(object):
         osc_dispatcher_late.map("/pyBinSim_late_Filter_Orientation", self.handle_late_filter_input)
         osc_dispatcher_late.map("/pyBinSim_late_Filter_Position", self.handle_late_filter_input)
         osc_dispatcher_late.map("/pyBinSim_late_Filter_Custom", self.handle_late_filter_input)
+        osc_dispatcher_late.map("/pyBinSim_late_Filter_sourceOrientation", self.handle_late_filter_input)
+        osc_dispatcher_late.map("/pyBinSim_late_Filter_sourcePosition", self.handle_late_filter_input)
 
         osc_dispatcher_misc = dispatcher.Dispatcher()
         osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
         osc_dispatcher_misc.map("/pyBinSimPauseAudioPlayback", self.handle_audio_pause)
         osc_dispatcher_misc.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
         osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
+        osc_dispatcher_misc.map("/pyBinSim_sd_Filter", self.handle_sd_filter_input)
 
         self.server = osc_server.ThreadingOSCUDPServer(
             (self.ip, self.port1), osc_dispatcher_ds)
@@ -109,21 +118,28 @@ class OscReceiver(object):
 
     def select_slice(self, i):
         switcher = {
-            "/pyBinSim_ds_Filter": slice(0, 9),
-            "/pyBinSim_ds_Filter_Short": slice(0, 6),
+            "/pyBinSim_ds_Filter": slice(0, 15),
+            "/pyBinSim_ds_Filter_Short": slice(0, 9),
             "/pyBinSim_ds_Filter_Orientation": slice(0, 3),
             "/pyBinSim_ds_Filter_Position": slice(3, 6),
             "/pyBinSim_ds_Filter_Custom": slice(6, 9),
-            "/pyBinSim_early_Filter": slice(0, 9),
-            "/pyBinSim_early_Filter_Short": slice(0, 6),
+            "/pyBinSim_ds_Filter_sourceOrientation": slice(9, 12),
+            "/pyBinSim_ds_Filter_sourcePosition": slice(12, 15),
+            "/pyBinSim_early_Filter": slice(0, 15),
+            "/pyBinSim_early_Filter_Short": slice(0, 9),
             "/pyBinSim_early_Filter_Orientation": slice(0, 3),
             "/pyBinSim_early_Filter_Position": slice(3, 6),
             "/pyBinSim_early_Filter_Custom": slice(6, 9),
-            "/pyBinSim_late_Filter": slice(0, 9),
-            "/pyBinSim_late_Filter_Short": slice(0, 6),
+            "/pyBinSim_early_Filter_sourceOrientation": slice(9, 12),
+            "/pyBinSim_early_Filter_sourcePosition": slice(12, 15),
+            "/pyBinSim_late_Filter": slice(0, 15),
+            "/pyBinSim_late_Filter_Short": slice(0, 9),
             "/pyBinSim_late_Filter_Orientation": slice(0, 3),
             "/pyBinSim_late_Filter_Position": slice(3, 6),
-            "/pyBinSim_late_Filter_Custom": slice(6, 9)
+            "/pyBinSim_late_Filter_Custom": slice(6, 9),
+            "/pyBinSim_late_Filter_sourceOrientation": slice(9, 12),
+            "/pyBinSim_late_Filter_sourcePosition": slice(12, 15),
+            "/pyBinSim_sd_Filter": slice(0, 9),
         }
         return switcher.get(i, [])
 
@@ -205,6 +221,34 @@ class OscReceiver(object):
 
         #self.log.info("Channel: {}".format(str(channel)))
         #self.log.info("Current Late Reverb Filter List: {}".format(str(self.valueList_late_reverb[current_channel, :])))
+
+    def handle_sd_filter_input(self, identifier, channel, *args):
+        """
+        Handler for tracking information
+
+        :param identifier:
+        :param channel:
+        :param args:
+        :return:
+        """
+
+        # self.log.info("Channel: {}".format(str(channel)))
+        # self.log.info("Args: {}".format(str(args)))
+
+        current_channel = channel
+        key_slice = self.select_slice(identifier)
+
+        if len(args) == len(self.valueList_sd_filter[current_channel, key_slice]):
+            if all(args == self.valueList_sd_filter[current_channel, key_slice]):
+                self.log.debug("Same direct sound filter as before")
+            else:
+                self.sd_filters_updated[current_channel] = True
+                self.valueList_sd_filter[current_channel, key_slice] = args
+        else:
+            self.log.warning("OSC identifier and key mismatch")
+
+        # self.log.info("Channel: {}".format(str(channel)))
+        # self.log.info("Current Filter List: {}".format(str(self.valueList_filter[current_channel, :])))
 
     def handle_file_input(self, identifier, soundpath):
         """ Handler for playlist control"""
