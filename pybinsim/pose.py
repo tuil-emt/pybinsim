@@ -1,6 +1,8 @@
 import logging
 from collections import namedtuple
 
+import numpy as np
+
 logger = logging.getLogger("pybinsim.Pose")
 
 
@@ -35,6 +37,7 @@ class Pose:
     @staticmethod
     def from_filterValueList(filter_value_list):
 
+        filter_value_list = np.squeeze(np.asarray(filter_value_list, dtype=np.int16))
         # format: listener_orientation - listener_position - custom
         if len(filter_value_list) == 9:
             listener_orientation = Orientation(
@@ -80,6 +83,8 @@ class SourcePose:
 
     @staticmethod
     def from_filterValueList(filter_value_list):
+
+        filter_value_list = np.squeeze(np.asarray(filter_value_list, dtype=np.int16))
 
         # 'new' format: source_orientation - source_position - custom
         if len(filter_value_list) == 9:

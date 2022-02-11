@@ -225,11 +225,11 @@ class FilterStorage(object):
                 continue
 
             # Parse all other filters
-            filter_value_list = np.concatenate([self.matfile[self.matvarname]['listenerOrientation'][0][row],
+            filter_value_list = np.concatenate((self.matfile[self.matvarname]['listenerOrientation'][0][row],
                                 self.matfile[self.matvarname]['listenerPosition'][0][row],
                                 self.matfile[self.matvarname]['sourceOrientation'][0][row],
                                 self.matfile[self.matvarname]['sourcePosition'][0][row],
-                                self.matfile[self.matvarname]['custom'][0][row]])
+                                self.matfile[self.matvarname]['custom'][0][row]))
 
             filter_pose = Pose.from_filterValueList(filter_value_list)
 
