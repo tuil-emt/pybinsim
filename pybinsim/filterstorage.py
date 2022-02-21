@@ -194,7 +194,7 @@ class FilterStorage(object):
         for var in range(len(self.mat_vars)):
 
             self.matvarname = self.mat_vars[var][0]
-            print(self.matvarname)
+            self.log.info("Loading mat variable : {}".format(self.matvarname))
 
             rows = self.matfile[self.matvarname].shape[1]
 
