@@ -66,6 +66,7 @@ class Pose:
 
         raise RuntimeError(
             "Unable to parse filter list: {}".format(filter_value_list))
+        #Todo: Add info were reading failed
 
 
 class SourcePose:
