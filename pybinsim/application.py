@@ -129,7 +129,7 @@ class BinSim(object):
         self.log = logging.getLogger("pybinsim.BinSim")
         self.log.info("BinSim: init")
 
-        self.cb_time_usage = np.array(range(0, 50), dtype='float32')
+        self.time_usage = np.array(range(0, 50), dtype='float32')
         self.cpu_usage_update_rate = 100
 
         # Read Configuration File
@@ -292,9 +292,6 @@ def audio_callback(binsim):
             import pydevd
             pydevd.settrace(suspend=False, trace_only_current_thread=True)
 
-        cb_start = timeit.default_timer()
-        count = 0
-
         # Update config
         binsim.current_config = binsim.oscReceiver.get_current_config()
 
@@ -371,13 +368,10 @@ def audio_callback(binsim):
         if np.max(np.abs(outdata)) > 1:
             binsim.log.warn('Clipping occurred: Adjust loudnessFactor!')
 
-        cb_end = timeit.default_timer()
-        cb_time = cb_end - cb_start
-        # binsim.log.info(f'Audio callback took {cb_time * 1000} ms.')
-        binsim.cb_time_usage[1] = cb_time/(binsim.blockSize/binsim.sampleRate)*100
-        binsim.cb_time_usage = np.roll(binsim.cb_time_usage, 1, axis=0)
+        binsim.time_usage[1] = binsim.stream.cpu_load*100
+        binsim.time_usage = np.roll(binsim.time_usage, 1, axis=0)
         if binsim.ds_convolver.get_counter() % binsim.cpu_usage_update_rate == 0:
-            binsim.log.info(f'Audio callback utilization Mean: {np.mean(binsim.cb_time_usage)} % - Max: {np.max(binsim.cb_time_usage)}')
+            binsim.log.info(f'Audio callback utilization Mean: {np.mean(binsim.time_usage)} % - Max: {np.max(binsim.time_usage)}')
 
     callback.config = binsim.config
 
