@@ -313,7 +313,7 @@ class FilterStorage(object):
 
             #if line.startswith('HPFILTER'):
             # handle headphone filter
-            if line.startswith('HPFILTER'):
+            if line.startswith('HP'):
                 if self.useHeadphoneFilter:
                     self.log.info("Loading headphone filter: {}".format(filter_path))
                     self.headphone_filter = Filter(self.load_wav_filter(filter_path, FilterType.headphone_Filter), self.headphone_ir_blocks, self.block_size, self.torch_settings)
@@ -326,15 +326,15 @@ class FilterStorage(object):
                 
             filter_type = FilterType.Undefined
             
-            if line.startswith('DSFILTER'):
+            if line.startswith('DS'):
                 filter_type = FilterType.ds_Filter
                 filter_value_list = tuple(line_content[1:-1])
                 filter_pose = Pose.from_filterValueList(filter_value_list)
-            elif line.startswith('EARLYFILTER'):
+            elif line.startswith('ER'):
                 filter_type = FilterType.early_Filter
                 filter_value_list = tuple(line_content[1:-1])
                 filter_pose = Pose.from_filterValueList(filter_value_list)
-            elif line.startswith('LATEFILTER'):
+            elif line.startswith('LR'):
                 filter_type = FilterType.late_Filter
                 filter_value_list = tuple(line_content[1:-1])
                 filter_pose = Pose.from_filterValueList(filter_value_list)
