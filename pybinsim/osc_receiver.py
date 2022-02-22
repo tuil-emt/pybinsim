@@ -103,6 +103,7 @@ class OscReceiver(object):
         osc_dispatcher_misc.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
         osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
         osc_dispatcher_misc.map("/pyBinSim_sd_Filter", self.handle_sd_filter_input)
+        osc_dispatcher_misc.map("/pyBinSimLoudness", self.handle_loudness)
 
         self.server = osc_server.ThreadingOSCUDPServer(
             (self.ip, self.port1), osc_dispatcher_ds)
@@ -271,6 +272,13 @@ class OscReceiver(object):
         assert identifier == "/pyBinSimPauseConvolution"
 
         self.currentConfig.set('pauseConvolution', value)
+        self.log.info("Pausing convolution")
+
+    def handle_loudness(self, identifier, value):
+        """ Handler for playback control"""
+        assert identifier == "/pyBinSimLoudness"
+
+        self.currentConfig.set('loudnessFactor', value)
         self.log.info("Pausing convolution")
 
     def start_listening(self):

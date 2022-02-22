@@ -182,9 +182,11 @@ class FilterStorage(object):
 
         if self.filter_source == 'wav':
             self.filter_list = open(self.filter_list_path, 'r')
+            self.log.info("Loading wav format filters according to filter list")
             # Start to load filters
             self.load_wav_filters()
         elif self.filter_source == 'mat':
+            self.log.info("Loading mat format filters")
             self.matfile = sio.loadmat(filter_database)
             self.mat_vars = sio.whosmat(filter_database)
             self.parse_and_load_matfile()
@@ -283,7 +285,7 @@ class FilterStorage(object):
                     filter_type = FilterType.Undefined
                     raise RuntimeError("Filter indentifier wrong or missing")
 
-        # clear matfile
+        # clear matfile after parsing
         self.matfile = []
 
     def parse_filter_list(self):
