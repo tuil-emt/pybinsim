@@ -40,16 +40,17 @@ import torch
 
 def parse_boolean(any_value):
 
-    if type(any_value) == bool:
-        return any_value
+    #if type(any_value) == bool:
+    #    return any_value
 
     # str -> bool
-    if any_value == 'True':
-        return True
-    if any_value == 'False':
-        return False
-
-    return None
+    if type(any_value) == str:
+        if any_value == 'True':
+            return True
+        if any_value == 'False':
+            return False
+    else:
+        return any_value
 
 
 class BinSimConfig(object):
