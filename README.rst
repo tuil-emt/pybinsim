@@ -71,7 +71,11 @@ Basic principle:
 ----------------
 
 Depending on the number of input channels (wave-file channels) the corresponding number of virtual sound sources is created. The filter for each sound source can selected and activitated via OSC messages. The messages basically contain the number
-index of the source for which the filter should be switched and an identifier string to address the correct filter. The correspondence between parameter value and filter is determined by a filter list which can be adjusted individually for the specific use case.
+index of the source for which the filter should be switched, an identifier string and a key to address the correct filter. The correspondence between the key and filter depends on how the filters are provided.
+
+Option A)
+A filtermap in txt format where each line contains a filter type name, key and path to the filter.
+(can be adjusted individually for the specific use case)
     
 Config parameter description:
 -----------------------------
