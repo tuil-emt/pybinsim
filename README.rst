@@ -26,7 +26,6 @@ Run
 Create ``pyBinSimSettings.txt`` file with content like this
 
 ::
-
 soundfile signals/speech2_48000_mono.wav
 blockSize 512
 ds_filterSize 256
