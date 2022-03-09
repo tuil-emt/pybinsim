@@ -37,6 +37,7 @@ setup(
         "pyserial ~= 3.4",
         "pytest ~= 6.1.1",
         "python-osc ~= 1.7.4",
+        "scipy ~= 1.8.0",
         "Soundfile ~= 0.10.3.post1",
     ],
 
