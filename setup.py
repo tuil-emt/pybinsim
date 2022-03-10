@@ -4,7 +4,7 @@ import sys
 from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
-VERSION = "1.2.4"
+VERSION = "1.3"
 
 
 class PyTest(TestCommand):
@@ -37,6 +37,7 @@ setup(
         "pyserial ~= 3.4",
         "pytest ~= 6.1.1",
         "python-osc ~= 1.7.4",
+        "scipy ~= 1.8.0",
         "Soundfile ~= 0.10.3.post1",
     ],
 

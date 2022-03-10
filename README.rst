@@ -7,66 +7,18 @@ PyBinSim
 Install
 -------
 
-Let's create a virtual environment. Use either Python or Conda to do this and then use `pip` to install the dependencies.
+Let's create a virtual environment. Use Conda to do this and then use `pip` to install the dependencies.
 
 Windows
 -------
 
-Assuming you are using the default command line 
-(navigate to `pyBinSim/` folder in Explorer, click into the address bar, type `cmd` and hit enter).
-
-
-python
-
-::
-    $ <PathToPython >= 3.6> -m venv venv
-    $ venv/Scripts/activate.bat
-    $ pip install pybinsim
-
-For Powershell, the activation command is `venv/Scripts/Activate.ps1`.
-
-
 conda
 
 ::
-    $ conda create --name binsim python=3.6 numpy
+    $ conda create --name binsim python=3.9 numpy
     $ conda activate binsim
     $ pip install pybinsim
 
-
-Linux
------
-
-On linux, make sure that gcc and the development headers for libfftw and portaudio are installed, before invoking `pip install pybinsim`.
-
-For ubuntu
-
-::
-
-    $ apt-get install gcc portaudio19-dev libfftw3-dev
-
-For Fedora
-
-::
-
-    $ sudo dnf install gcc portaudio19-devel fftw-devel
-
-
-python
-
-::
-    $ <PathToPython >= 3.6> -m venv venv
-    $ source venv/bin/activate
-    $ pip install pybinsim
-
-
-conda
-
-::
-    $ conda create --name binsim python=3.6 numpy
-    $ conda activate binsim
-    $ pip install pybinsim
-    
 
 Run
 ---
@@ -75,21 +27,28 @@ Create ``pyBinSimSettings.txt`` file with content like this
 
 ::
 
-soundfile signals/speech2_48000_mono.wav
-blockSize 128
-ds_filterSize 256
-early_filterSize 3072
-late_filterSize 32768
-filterList brirs/filtermap.txt
-maxChannels 2
-samplingRate 48000
-enableCrossfading True
-useHeadphoneFilter True
-headphone_filterSize 1024
-loudnessFactor 0.5
-loopSound True
-pauseConvolution False
-pauseAudioPlayback False
+    soundfile signals/speech2_48000_mono.wav
+    blockSize 512
+    ds_filterSize 256
+    early_filterSize 3072
+    late_filterSize 48640
+    filterSource[mat/wav] mat
+    filterDatabase brirs/example_mat.mat
+    filterList brirs/filtermap_example.txt
+    maxChannels 1
+    samplingRate 48000
+    enableCrossfading True
+    useHeadphoneFilter False
+    headphone_filterSize 1024
+    loudnessFactor 3
+    loopSound True
+    pauseConvolution False
+    pauseAudioPlayback False
+    torchConvolution[cpu/cuda] cpu
+    torchStorage[cpu/cuda] cpu
+    ds_convolverActive True
+    early_convolverActive True
+    late_convolverActive True
 
 
 Start Binaural Simulation
@@ -112,7 +71,11 @@ Basic principle:
 ----------------
 
 Depending on the number of input channels (wave-file channels) the corresponding number of virtual sound sources is created. The filter for each sound source can selected and activitated via OSC messages. The messages basically contain the number
-index of the source for which the filter should be switched and an identifier string to address the correct filter. The correspondence between parameter value and filter is determined by a filter list which can be adjusted individually for the specific use case.
+index of the source for which the filter should be switched, an identifier string and a key to address the correct filter. The correspondence between the key and filter depends on how the filters are provided.
+
+Option A)
+A filtermap in txt format where each line contains a filter type name, key and path to the filter.
+(can be adjusted individually for the specific use case)
     
 Config parameter description:
 -----------------------------
@@ -122,15 +85,21 @@ soundfile:
 blockSize: 
     Number of samples which are processed per block. Low values reduce delay but increase cpu load.
 ds_filterSize: 
-    Defines filter size of the direct sound filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+    Defines filter size of the direct sound filters. Filter size must be a mutltiple of blockSize. If your filters are a different length, they are either shortened or zero padded to the size indicated here. Filter smaller than the blockSize are zero padded to blockSize.
 early_filterSize: 
-    Defines filter size of the early filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+    Defines filter size of the early filters. Filter size must be a mutltiple of blockSize. If your filters are a different length, they are either shortened or zero padded to the size indicated here.
 late_filterSize: 
-    Defines filter size of the late reverb filters loaded with the filter list. Filter size should be a mutltiple of blockSize.
+    Defines filter size of the late reverb filters. Filter size must be a mutltiple of blockSize. If your filters are a different length, they are either shortened or zero padded to the size indicated here.
 headphone_filterSize: 
-    Defines filter size of the headphone compensation filters loaded with the filter list. Filter size should be a mutltiple of blockSize.    
+    Defines filter size of the headphone compensation filters. Filter size must be a mutltiple of blockSize.
+filterSource[mat/wav]:
+    Choose between 'mat' or 'wav' to indicate wether you want to use filters stored as mat file or as seperate wav files
+filterDatabase:
+    Enter path to the mat file containing your filters. Check example for structure of the mat file
+filterList:
+    Enter path to the filtermap.txt which specifies the mapping of keys to filters stored as wav files. Check example filtermap for formatting.
 maxChannels: 
-    Maximum number of sound sources/audio channels which can be controlled during runtime. The value for maxChannels must match or exceed the number of channels of soundFile(s).
+    Maximum number of sound sources/audio channels which can be controlled during runtime. The value for maxChannels must match or exceed the number of channels of soundFile(s). If you choose thi value to high, processing power will be wasted.
 samplingRate: 
     Sample rate for filters and soundfiles. Caution: No automatic sample rate conversion.
 enableCrossfading: 
@@ -144,7 +113,21 @@ loopSound:
 pauseConvolution:
     Bypasses convolution
 pauseAudioPlayback:
-    Audio playback is paused
+    Audio playback is paused (convolution is still running)
+torchConvolution[cpu/cuda]:
+    Choose 'cpu' when convolution should be done on CPU or 'cuda' when you intend to you use a cuda enabled graphics cards. 
+    For the latter, make sure torch is installed by CUDA support (which is not the case with the default pip installation mentioned above).    
+    Check this: https://pytorch.org/get-started/locally/
+torchStorage[cpu/cuda]:
+    Choose 'cpu' when filter should be stored in the RAM or 'cuda' when you want to store filters directly on the graphics card memory.
+    For the latter, make sure torch is installed by CUDA support (which is not the case with the default pip installation mentioned above).    
+    Check this: https://pytorch.org/get-started/locally/
+ds_convolverActive:
+    Enables or disables convolver. When only one convolver is needed, its adviced to disable the others to save performacne. Set 'False' or 'True'.
+early_convolverActive: 
+    Enables or disables convolver. Set 'False' or 'True'.
+late_convolverActive:
+    Enables or disables convolver. Set 'False' or 'True'.
 
 OSC Messages and filter lists:
 ------------------------------
