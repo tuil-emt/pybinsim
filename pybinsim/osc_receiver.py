@@ -275,11 +275,11 @@ class OscReceiver(object):
         self.log.info("Pausing convolution")
 
     def handle_loudness(self, identifier, value):
-        """ Handler for playback control"""
+        """ Handler for loudness control"""
         assert identifier == "/pyBinSimLoudness"
 
         self.currentConfig.set('loudnessFactor', value)
-        self.log.info("Pausing convolution")
+        self.log.info("Changing loudness")
 
     def start_listening(self):
         """Start osc receiver in background Thread"""
