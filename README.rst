@@ -71,7 +71,11 @@ Basic principle:
 ----------------
 
 Depending on the number of input channels (wave-file channels) the corresponding number of virtual sound sources is created. The filter for each sound source can selected and activitated via OSC messages. The messages basically contain the number
-index of the source for which the filter should be switched, an identifier string and a key to address the correct filter. Each key corresponds to one filter.
+index of the source for which the filter should be switched, an identifier string and a key to address the correct filter. Each key corresponds to one filter. 
+
+pyBinSim now features upto three separate convolvers which enables you to exchange filter parts in real-time. Each convolver runs independently from the others and their results are summed together. This needs to be considered when creating the corresponding filters.
+
+Also, pyBinSim offers you the possibility to run the convolution on a CUDA based graphics card. Especially for long filters (several seconds) or/and multiple sound sources this can lead to a signficant speedup.
 
     
 Config parameter description:
@@ -141,11 +145,16 @@ Example lines from filter list:
 Lines with the prefix DS, ER and LR contain a 'filter key' which consist of 9 or 15 intger numbers. They are used to tell pyBinSim which filter to apply. These numbers can be arbitrarily assigned to suit your use case, but for conistency with mat based filters its adivced to assign the numbers in the following order:
 
 For 9 digit keys:
+
+::
 Value 1-3 : listener orientation [yaw, pitch, roll]
 Value 4-6 : listener position [x, y, z]
 Value 7-9 : custom values [a, b, c]
 
 For 15 digit keys:
+
+::
+
 Value 1-3 : listener orientation [yaw, pitch, roll]
 Value 4-6 : listener position [x, y, z]
 Value 7-9 : source orientation [yaw, pitch, roll]
