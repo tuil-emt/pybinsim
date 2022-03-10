@@ -238,6 +238,13 @@ Bypass convolution. Send 'True' or 'False' (as string, not bool)
     /pyBinSimPauseConvolution 'True'
 
 
+Change loudness. Send float value.
+
+::
+
+    /pyBinSimLoudness 0.8    
+
+
 Because of issues with OSC when many messages are sent, multiple OSC receivers are used. Commands related to the ds_Filter should be addressed to port 10000, early_Filter commands to port 10001, late_Filter commands to port 10002 and all other commands to port 10003. This will probably be changed in future releases.
 
 
