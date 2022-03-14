@@ -285,7 +285,10 @@ class FilterStorage(object):
                     filter_type = FilterType.Undefined
                     raise RuntimeError("Filter indentifier wrong or missing")
 
-        # clear matfile after parsing
+            # Delete parsed variable
+            self.matfile.pop(self.matvarname)
+
+        # clear whole matfile after parsing
         self.matfile = []
 
     def parse_filter_list(self):
