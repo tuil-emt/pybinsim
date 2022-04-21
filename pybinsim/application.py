@@ -34,7 +34,9 @@ from pybinsim.filterstorage import FilterStorage
 from pybinsim.pose import Pose
 from pybinsim.soundhandler import SoundHandler
 from pybinsim.input_buffer import InputBufferMulti
+from pybinsim.pkg_receiver import PkgReceiver
 from pybinsim.zmq_receiver import ZmqReceiver
+from pybinsim.osc_receiver import OscReceiver
 
 import timeit
 import torch
@@ -79,9 +81,10 @@ class BinSimConfig(object):
                                   'ds_convolverActive': False,
                                   'early_convolverActive': True,
                                   'late_convolverActive': True,
-                                  'zmq_protocol': 'tcp',
-                                  'zmq_ip': '127.0.0.1',
-                                  'zmq_port': '10001'}
+                                  'recv_type': 'zmq',
+                                  'recv_protocol': 'tcp',
+                                  'recv_ip': '127.0.0.1',
+                                  'recv_port': '10001'}
 
     def read_from_file(self, filepath):
         config = open(filepath, 'r')
@@ -146,8 +149,8 @@ class BinSim(object):
         self.stream = None
 
         #self.convolverWorkers = []
-        self.convolverHP, self.ds_convolver, self.early_convolver, self.late_convolver, self.input_Buffer,\
-        self.input_BufferHP, self.filterStorage,  self.zmqReceiver, self.soundHandler = self.initialize_pybinsim()
+        self.convolverHP, self.ds_convolver, self.early_convolver, self.late_convolver, self.input_Buffer, \
+        self.input_BufferHP, self.filterStorage, self.pkgReceiver, self.soundHandler = self.initialize_pybinsim()
 
     def __enter__(self):
         return self
@@ -214,9 +217,11 @@ class BinSim(object):
         #oscReceiver.start_listening()
         #time.sleep(1)
 
-        # Start a ZmqReceiver
-        zmqReceiver = ZmqReceiver(self.config)
-        zmqReceiver.start_listening()
+        # Start a PkgReceiver
+        recv_type = self.config.get("recv_type")
+        recv_select = {"zmq": ZmqReceiver, "osc": OscReceiver}
+        pkgReceiver = recv_select.get(recv_type, PkgReceiver)(self.config)
+        pkgReceiver.start_listening()
         time.sleep(1)
 
         # Create SoundHandler
@@ -259,12 +264,12 @@ class BinSim(object):
             convolverHP.setIR(0, hpfilter)
 
         return convolverHP, ds_convolver, early_convolver, late_convolver, input_Buffer, input_BufferHP, \
-               filterStorage, zmqReceiver, soundHandler
+               filterStorage, pkgReceiver, soundHandler
 
     def __cleanup(self):
         # Close everything when BinSim is finished
         #self.oscReceiver.close()
-        self.zmqReceiver.close()
+        self.pkgReceiver.close()
         self.stream.close()
         self.filterStorage.close()
         self.input_Buffer.close()
@@ -297,11 +302,11 @@ def audio_callback(binsim):
 
         # Update config
         #binsim.current_config = binsim.oscReceiver.get_current_config()
-        binsim.current_config = binsim.zmqReceiver.get_current_config()
+        binsim.current_config = binsim.pkgReceiver.get_current_config()
 
         # Update audio files
         #current_soundfile_list = binsim.oscReceiver.get_sound_file_list()
-        current_soundfile_list = binsim.zmqReceiver.get_sound_file_list()
+        current_soundfile_list = binsim.pkgReceiver.get_sound_file_list()
         if current_soundfile_list:
             binsim.soundHandler.request_new_sound_file(current_soundfile_list)
 
@@ -331,25 +336,25 @@ def audio_callback(binsim):
 
                 # Get new Filter
                 #if binsim.oscReceiver.is_ds_filter_update_necessary(n):
-                if binsim.zmqReceiver.is_ds_filter_update_necessary(n):
+                if binsim.pkgReceiver.is_ds_filter_update_necessary(n):
                     #ds_filterValueList = binsim.oscReceiver.get_current_ds_filter_values(n)
-                    ds_filterValueList = binsim.zmqReceiver.get_current_ds_filter_values(n)
+                    ds_filterValueList = binsim.pkgReceiver.get_current_ds_filter_values(n)
                     ds_filter = binsim.filterStorage.get_ds_filter(Pose.from_filterValueList(ds_filterValueList))
                     binsim.ds_convolver.setIR(n, ds_filter)
 
                 # Get new early reverb Filter
                 #if binsim.oscReceiver.is_early_filter_update_necessary(n):
-                if binsim.zmqReceiver.is_early_filter_update_necessary(n):
+                if binsim.pkgReceiver.is_early_filter_update_necessary(n):
                     #early_filterValueList = binsim.oscReceiver.get_current_early_filter_values(n)
-                    early_filterValueList = binsim.zmqReceiver.get_current_early_filter_values(n)
+                    early_filterValueList = binsim.pkgReceiver.get_current_early_filter_values(n)
                     early_filter = binsim.filterStorage.get_early_filter(Pose.from_filterValueList(early_filterValueList))
                     binsim.early_convolver.setIR(n, early_filter)
 
                 # Get new late reverb Filter
                 #if binsim.oscReceiver.is_late_filter_update_necessary(n):
-                if binsim.zmqReceiver.is_late_filter_update_necessary(n):
+                if binsim.pkgReceiver.is_late_filter_update_necessary(n):
                     #late_filterValueList = binsim.oscReceiver.get_current_late_filter_values(n)
-                    late_filterValueList = binsim.zmqReceiver.get_current_late_filter_values(n)
+                    late_filterValueList = binsim.pkgReceiver.get_current_late_filter_values(n)
                     late_filter = binsim.filterStorage.get_late_filter(Pose.from_filterValueList(late_filterValueList))
                     binsim.late_convolver.setIR(n, late_filter)
 
