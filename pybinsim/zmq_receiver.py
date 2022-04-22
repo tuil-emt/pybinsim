@@ -60,7 +60,8 @@ class ZmqReceiver(PkgReceiver):
             # other
             "/pyBinSimFile": self.handle_file_input,
             "/pyBinSimPauseAudioPlayback": self.handle_audio_pause,
-            "/pyBinSimPauseConvolution": self.handle_convolution_pause
+            "/pyBinSimPauseConvolution": self.handle_convolution_pause,
+            "/pyBinSimMultiCommand": self.handle_multi_command,
         }
 
         self.run_thread = False
@@ -133,7 +134,7 @@ class ZmqReceiver(PkgReceiver):
                     #     msg = pickle.loads(msg_frame.bytes)
 
                     self.zmq_map[msg[0]](*msg)
-                    self.log.info(msg)
+                    # self.log.info(msg)
                 except zmq.ZMQError:
                     # TODO: error handling if necessary
                     print('meh')
@@ -142,6 +143,23 @@ class ZmqReceiver(PkgReceiver):
 
         zmq_socket.close()
         zmq_context.term()
+
+    def handle_multi_command(self, identifier, commands, *args):
+        """
+        handler for multiple subcommands
+
+        :param identifier: Command identifier "/pyBinSimMultiCommand"
+        :param commands: Number of subcommands
+        :param args: All the subcommands as list of lists
+        """
+        num_com = int(commands)
+        if len(args) == num_com:
+            # Traverse list of subcommands and just call the appropriate functions according to our map
+            for subcommand in args:
+                self.zmq_map[subcommand[0]](*subcommand)
+                # self.log.info(subcommand)
+        else:
+            self.log.warning('Given number of subcommands not equal to actual list of subcommands.')
 
     def close(self):
         """
