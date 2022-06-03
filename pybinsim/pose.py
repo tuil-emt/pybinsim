@@ -29,8 +29,8 @@ class Pose:
 
     def create_key(self):
         value_list = list(self.listener_orientation) + \
-            list(self.listener_position) + list(self.source_position) + \
-            list(self.source_orientation) + list(self.custom)
+            list(self.listener_position) + list(self.source_orientation) + \
+            list(self.source_position) + list(self.custom)
 
         return ','.join([str(x) for x in value_list])
 
