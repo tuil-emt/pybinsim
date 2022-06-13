@@ -25,6 +25,7 @@ from timeit import default_timer
 
 import numpy as np
 import torch
+from copy import deepcopy
 
 
 class ConvolverTorch(object):
@@ -119,6 +120,7 @@ class ConvolverTorch(object):
         :param do_interpolation:
         :return: None
         """
+        self.saveOldFilters()
 
         left, right = current_filter.getFilterFD()
         self.left_filters_blocked[sourceId::self.sources, ] = \
@@ -131,8 +133,10 @@ class ConvolverTorch(object):
 
     def saveOldFilters(self):
         # Save old filters in case interpolation is needed
-        self.left_previous_filters_blocked = self.left_filters_blocked
-        self.right_previous_filters_blocked = self.right_filters_blocked
+        #print(torch.all(torch.eq(self.left_previous_filters_blocked, self.left_filters_blocked)))
+
+        self.left_previous_filters_blocked = deepcopy(self.left_filters_blocked)
+        self.right_previous_filters_blocked = deepcopy(self.right_filters_blocked)
 
     def process_nothing(self):
         """
@@ -169,15 +173,15 @@ class ConvolverTorch(object):
                 self.left_FDL[:self.sources, ] = input_buffer
                 self.right_FDL[:self.sources, ] = input_buffer
 
-            # Save previous filters
-            self.saveOldFilters()
+
 
             # Second: Multiplication with IR block und accumulation
-            self.resultLeftFreq= torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
+            self.resultLeftFreq = torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
             self.resultRightFreq = torch.sum(torch.multiply(self.right_filters_blocked, self.right_FDL), keepdim=True, dim=0)
 
 
             # Third: Transformation back to time domain
+            #test=torch.fft.irfft(self.resultLeftFreq)
             self.outputLeft = torch.fft.irfft(self.resultLeftFreq)[:, self.block_size:self.block_size * 2]
             self.outputRight = torch.fft.irfft(self.resultRightFreq)[:, self.block_size:self.block_size * 2]
 
@@ -198,6 +202,9 @@ class ConvolverTorch(object):
 
                 self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
                                          torch.multiply(self.outputRight_previous, self.crossFadeOut))
+
+            # Save previous filters
+            self.saveOldFilters()
 
         self.processCounter += 1
 

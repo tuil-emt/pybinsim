@@ -254,7 +254,7 @@ class BinSim(object):
         convolverHP = None
         if self.config.get('useHeadphoneFilter'):
             convolverHP = ConvolverTorch(self.config.get('headphone_filterSize'), self.blockSize, True, 2,
-                                         True,
+                                         False,
                                          self.config.get('torchConvolution[cpu/cuda]'))
             convolverHP.activate(True)
             hpfilter = filterStorage.get_headphone_filter()
