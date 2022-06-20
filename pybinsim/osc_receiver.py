@@ -101,7 +101,6 @@ class OscReceiver(object):
         osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
         osc_dispatcher_misc.map("/pyBinSimPauseAudioPlayback", self.handle_audio_pause)
         osc_dispatcher_misc.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
-        osc_dispatcher_misc.map("/pyBinSimFile", self.handle_file_input)
         osc_dispatcher_misc.map("/pyBinSim_sd_Filter", self.handle_sd_filter_input)
         osc_dispatcher_misc.map("/pyBinSimLoudness", self.handle_loudness)
 
