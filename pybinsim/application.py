@@ -182,8 +182,8 @@ class BinSim(object):
         #self.result = np.empty([self.blockSize, 2], dtype=np.float32)
         self.result = torch.zeros(2, self.blockSize, dtype=torch.float32)
 
-        self.block = np.zeros(
-            [self.nChannels, self.blockSize], dtype=np.float32)
+        #self.block = np.zeros([self.nChannels, self.blockSize], dtype=np.float32)
+        self.block = torch.zeros([self.nChannels, self.blockSize], dtype=torch.float32)
 
         ds_size = self.config.get('ds_filterSize')
         early_size = self.config.get('early_filterSize')
@@ -307,15 +307,16 @@ def audio_callback(binsim):
             return
 
         if binsim.current_config.get('pauseAudioPlayback'):
-            binsim.block[:amount_channels, :] = binsim.soundHandler.read_zeros()
+            binsim.block[:amount_channels, :] = torch.as_tensor(binsim.soundHandler.read_zeros(), dtype=torch.float32, device=binsim.config.get('torchConvolution[cpu/cuda]'))
         else:
-            binsim.block[:amount_channels, :] = binsim.soundHandler.buffer_read()
+            binsim.block[:amount_channels, :] = torch.as_tensor(binsim.soundHandler.buffer_read(), dtype=torch.float32, device=binsim.config.get('torchConvolution[cpu/cuda]'))
 
         if binsim.current_config.get('pauseConvolution'):
+
             if binsim.soundHandler.get_sound_channels() == 2:
                 binsim.result = binsim.block
             else:
-                mix = np.mean(binsim.block[:binsim.soundHandler.get_sound_channels(), :], 0)
+                mix = torch.mean(binsim.block[:binsim.soundHandler.get_sound_channels(), :], dim=0)
                 binsim.result[0, :] = mix
                 binsim.result[1, :] = mix
         else:
