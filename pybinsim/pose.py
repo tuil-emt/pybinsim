@@ -28,11 +28,7 @@ class Pose:
         self.custom = custom
 
     def create_key(self):
-        value_list = list(self.listener_orientation) + \
-            list(self.listener_position) + list(self.source_orientation) + \
-            list(self.source_position) + list(self.custom)
-
-        return ','.join([str(x) for x in value_list])
+        return (self.listener_orientation, self.listener_position, self.source_orientation, self.source_position, self.custom)
 
     @staticmethod
     def from_filterValueList(filter_value_list):
@@ -78,10 +74,7 @@ class SourcePose:
         self.custom = custom
 
     def create_key(self):
-        value_list = list(self.source_orientation) + \
-            list(self.source_position) + list(self.custom)
-
-        return ','.join([str(x) for x in value_list])
+        return (self.source_orientation, self.source_position, self.custom)
 
     @staticmethod
     def from_filterValueList(filter_value_list):

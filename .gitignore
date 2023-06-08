@@ -17,3 +17,6 @@ brirs/
 
 # test files
 junit_results.xml
+
+# profile files
+**.prof*
