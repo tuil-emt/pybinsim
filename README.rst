@@ -82,7 +82,7 @@ Config parameter description:
 -----------------------------
 
 soundfile: 
-    Defines \*.wav file which is played back at startup. Sound file can contain up to maxChannels audio channels. Also accepts multiple files separated by '#'; Example: 'soundfile signals/sound1.wav#signals/sound2.wav
+    Defines \*.wav file which is played back at startup. Sound file can contain up to maxChannels audio channels. Also accepts multiple files separated by '#'; Example: 'soundfile signals/sound1.wav#signals/sound2.wav'. The corresponding player is called ``config_soundfile``. When config parameter is missing, nothing is played at startup. 
 blockSize: 
     Number of samples which are processed per block. Low values reduce delay but increase cpu load.
 ds_filterSize: 
@@ -213,7 +213,7 @@ When you want to play another sound file you send:
 
     /pyBinSimFile folder/file_new.wav
 
-Or a sound file list:
+This stops all other players and plays the sound file on a new player called ``config_soundfile``. If you want to play a sound file list:
 
 ::
 
@@ -221,32 +221,77 @@ Or a sound file list:
 
 The audiofile has to be located on the pc where pyBinSim runs. Files are not transmitted over network.
 
+Because of issues with OSC when many messages are sent, multiple OSC receivers are used. Commands related to the ds_Filter should be addressed to port 10000, early_Filter commands to port 10001, late_Filter commands to port 10002 and all other commands to port 10003. This will probably be changed in future releases.
 
 Further OSC Messages:
 ------------------------------
 
-Pause audio playback. Send 'True' or 'False' (as string, not bool)
+Pause all audio playback. Send 'True' or 'False' (as string, not bool). Individual player controls remain unchanged.
 
 ::
 
-    /pyBinSimPauseAudioPlayback 'True'
-
-Bypass convolution. Send 'True' or 'False' (as string, not bool)
-
-::
-
-    /pyBinSimPauseConvolution 'True'
+    /pyBinSimPauseAudioPlayback {pausePlayback: string["True"|"False"]}
 
 
-Change loudness. Send float value.
+Bypass convolution. Send 'True' or 'False' (as string, not bool).
 
 ::
 
-    /pyBinSimLoudness 0.8    
+    /pyBinSimPauseConvolution {pauseConvolution: string["True"|"False"]}
 
 
-Because of issues with OSC when many messages are sent, multiple OSC receivers are used. Commands related to the ds_Filter should be addressed to port 10000, early_Filter commands to port 10001, late_Filter commands to port 10002 and all other commands to port 10003. This will probably be changed in future releases.
+Change global loudness. Send float value. Volume of individual players is not affected.
 
+::
+
+    /pyBinSimLoudness {loudness: float32}
+
+
+Create a new player. Players can play back files independent from each other. A
+player's output is sent to the start channel and consecutive channels, up to the
+channel count of the current sound file. If a player with the same name is
+already present, a new one with the same name will be created and used instead. 
+
+::
+
+    /pyBinSimPlay {soundfile_list: string} {start_channel: int32 = 0} {loop: string["loop"|"single"] = "single"} {player_name: string|int32|float32 = soundfile_list} {volume: float32 = 1.0} {play: string["play"|"pause"] = "play"}   
+
+
+Pause, stop or start a player.
+
+::
+
+    /pyBinSimPlayerControl {player_name: string} {play: string["play"|"pause"|"stop"]}
+
+
+Change the output channel of a player.
+
+::
+
+    /pyBinSimPlayerChannel {player_name: string} {start channel: int32} 
+
+
+Change the volume of a player.
+
+::
+
+    /pyBinSimPlayerVolume {player_name: string} {volume: float32|int32}
+
+
+Stop all players.
+
+::
+
+    /pyBinSimStopAllPlayers
+
+Signal Flowchart
+------------------------------
+
+.. image:: players-flowchart.drawio.svg
+  :width: 400
+  :alt: Flowchart showing signal flow with players
+
+This flowchart shows how players can be independently controlled and that multiple players can feed any given convolver channel.
 
 Reference:
 ----------

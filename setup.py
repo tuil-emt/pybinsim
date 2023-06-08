@@ -28,7 +28,7 @@ setup(
     author='Annika Neidhardt, Florian Klein, Thomas Koellmer',
     author_email='thomas.koellmer@tu-ilmenau.de',
     url='https://github.com/pyBinSim/pyBinSim',
-    tests_require=['pytest'],
+    tests_require=['pytest', 'backoff >= 2.2.1'],
     cmdclass={'test': PyTest},
     install_requires=[
         "numpy >= 1.19.2",
@@ -54,8 +54,8 @@ setup(
         'Operating System :: Microsoft :: Windows',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.9',
         'License :: OSI Approved :: MIT License'
     ],
-    python_requires='>=3.6'
+    python_requires='>=3.9'
 )
