@@ -49,65 +49,42 @@ class Filter(object):
         self.TF_blocks = irBlocks
         self.TF_block_size = block_size + 1
 
-        ir_left_blocked = np.reshape(inputfilter[:, 0], (irBlocks, block_size))
-        ir_right_blocked = np.reshape(inputfilter[:, 1], (irBlocks, block_size))
-        self.IR_left_blocked = torch.as_tensor(ir_left_blocked, dtype=torch.float32, device=self.torch_device)
-        self.IR_right_blocked = torch.as_tensor(ir_right_blocked, dtype=torch.float32, device=self.torch_device)
+        # input shape: (ir_length, 2)
+        ir_blocked = np.empty((2, irBlocks, block_size))
+        ir_blocked[0,] = np.reshape(inputfilter[:,0], (irBlocks, block_size))
+        ir_blocked[1,] = np.reshape(inputfilter[:,1], (irBlocks, block_size))
+        self.IR_blocked = torch.as_tensor(ir_blocked, dtype=torch.float32, device=self.torch_device)
 
         # not used
         self.filename = filename
         
         self.fd_available = False
-        self.TF_left_blocked = None
-        self.TF_right_blocked = None
+        self.TF_blocked = None
 
     def getFilter(self):
-        return self.IR_left_blocked, self.IR_right_blocked
+        return self.IR_blocked
     
     def getFilterTD(self):
         if self.fd_available:
             self.log.warning("FilterStorage: No time domain filter available!")
-            left = torch.zeros((self.ir_blocks, self.block_size))
-            right = torch.zeros((self.ir_blocks, self.block_size))
+            return torch.zeros((2, self.ir_blocks, self.block_size))
         else:
-            left = self.IR_left_blocked
-            right = self.IR_right_blocked
-
-        return left, right
-
-    def apply_fadeout(self,window):
-        self.IR_left_blocked[self.ir_blocks-1, :] = torch.multiply(self.IR_left_blocked[self.ir_blocks-1, :], window)
-        self.IR_right_blocked[self.ir_blocks-1, :] = torch.multiply(self.IR_right_blocked[self.ir_blocks-1, :], window)
-
-    def apply_fadein(self,window):
-        self.IR_left_blocked[0, :] = torch.multiply(self.IR_left_blocked[0, :], window)
-        self.IR_right_blocked[0, :] = torch.multiply(self.IR_right_blocked[0, :], window)
+            return self.IR_blocked
 
     def storeInFDomain(self):
-
-        self.TF_left_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
-        self.TF_right_blocked = torch.zeros((self.ir_blocks, self.block_size + 1), dtype=torch.complex64, device=self.torch_device)
-
-        self.TF_left_blocked = torch.fft.rfft(self.IR_left_blocked, dim=1, n=self.block_size*2)
-        self.TF_right_blocked = torch.fft.rfft(self.IR_right_blocked, dim=1, n=self.block_size*2)
-        #print(np.shape(self.TF_right_blocked))
+        self.TF_blocked = torch.fft.rfft(self.IR_blocked, dim=2, n=self.block_size*2)
 
         self.fd_available = True
 
         # Discard time domain data
-        self.IR_left_blocked = None
-        self.IR_right_blocked = None
+        self.IR_blocked = None
 
     def getFilterFD(self):
         if not self.fd_available:
             self.log.warning("FilterStorage: No frequency domain filter available!")
-            left = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
-            right = torch.zeros((self.ir_blocks, self.block_size+1), dtype=torch.complex64)
+            return torch.zeros((2, self.ir_blocks, self.block_size+1), dtype=torch.complex64)
         else:
-            left = self.TF_left_blocked
-            right = self.TF_right_blocked
-
-        return left, right
+            return self.TF_blocked
 
 class FilterType(enum.Enum):
     Undefined = 0
@@ -152,13 +129,6 @@ class FilterStorage(object):
         self.default_late_filter.storeInFDomain()
         self.default_sd_filter.storeInFDomain()
         
-        # Calculate COSINE-Square crossfade windows - also used in convolver
-        self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
-        self.crossFadeOut = np.square(np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
-        self.crossFadeIn = np.flipud(self.crossFadeOut)
-        self.crossFadeOut = torch.as_tensor(self.crossFadeOut)
-        self.crossFadeIn = torch.as_tensor(np.copy(self.crossFadeIn))
-
         self.useHeadphoneFilter = useHeadphoneFilter
         if useHeadphoneFilter:
             self.headPhoneFilterSize = headphoneFilterSize
@@ -398,8 +368,6 @@ class FilterStorage(object):
                 # preprocess filters and put them in a dict
                 current_filter = Filter(self.load_wav_filter(filter_path, filter_type), self.ds_blocks, self.block_size, self.torch_settings)
 
-                # apply fade out to all filters
-                # current_filter.apply_fadeout(self.crossFadeOut)
                 current_filter.storeInFDomain()
                 
                 # create key and store in dict
@@ -410,8 +378,6 @@ class FilterStorage(object):
                 # preprocess late reverb filters and put them in a separate dict
                 current_filter = Filter(self.load_wav_filter(filter_path, filter_type), self.early_blocks, self.block_size, self.torch_settings)
 
-                # apply fade in to all late reverb filters
-                # current_filter.apply_fadein(self.crossFadeIn)
                 current_filter.storeInFDomain()
                 
                 #create key and store in dict
@@ -422,8 +388,6 @@ class FilterStorage(object):
                 # preprocess late reverb filters and put them in a separate dict
                 current_filter = Filter(self.load_wav_filter(filter_path, filter_type), self.late_blocks, self.block_size, self.torch_settings)
 
-                # apply fade in to all late reverb filters
-                # current_filter.apply_fadein(self.crossFadeIn)
                 current_filter.storeInFDomain()
 
                 # create key and store in dict
@@ -466,15 +430,15 @@ class FilterStorage(object):
 
         key = pose.create_key()
 
-        if key in self.ds_filter_dict:
-            #self.log.info("Filter found: key: {}".format(key))
-            result_filter = self.ds_filter_dict.get(key)
-            if result_filter.filename is not None:
-                self.log.info("   use file:: {}".format(result_filter.filename))
-            return result_filter
-        else:
+        try:
+            result_filter = self.ds_filter_dict[key]
+        except KeyError as err:
             self.log.warning('Filter not found: key: {}'.format(key))
             return self.default_ds_filter
+        
+        if result_filter.filename is not None:
+            self.log.info("   use file:: {}".format(result_filter.filename))
+        return result_filter
 
     def get_early_filter(self, pose):
         """
@@ -487,15 +451,15 @@ class FilterStorage(object):
 
         key = pose.create_key()
 
-        if key in self.early_filter_dict:
-            #self.log.info("Filter found: key: {}".format(key))
-            result_filter = self.early_filter_dict.get(key)
-            if result_filter.filename is not None:
-                self.log.info("   use file:: {}".format(result_filter.filename))
-            return result_filter
-        else:
+        try:
+            result_filter = self.early_filter_dict[key]
+        except KeyError as err:
             self.log.warning('Filter not found: key: {}'.format(key))
             return self.default_early_filter
+        
+        if result_filter.filename is not None:
+            self.log.info("   use file:: {}".format(result_filter.filename))
+        return result_filter
 
     def get_late_filter(self, pose):
         """
@@ -508,15 +472,15 @@ class FilterStorage(object):
 
         key = pose.create_key()
 
-        if key in self.late_filter_dict:
-            #self.log.info("Filter found: key: {}".format(key))
-            result_filter = self.late_filter_dict.get(key)
-            if result_filter.filename is not None:
-                self.log.info("   use file:: {}".format(result_filter.filename))
-            return result_filter
-        else:
+        try:
+            result_filter = self.late_filter_dict[key]
+        except KeyError as err:
             self.log.warning('Filter not found: key: {}'.format(key))
             return self.default_late_filter
+        
+        if result_filter.filename is not None:
+            self.log.info("   use file:: {}".format(result_filter.filename))
+        return result_filter
 
     def get_headphone_filter(self):
         if self.headphone_filter is None:
@@ -572,4 +536,3 @@ class FilterStorage(object):
 
     def close(self):
         self.log.info('FilterStorage: close()')
-        # TODO: do something in here?

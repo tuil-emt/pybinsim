@@ -284,6 +284,44 @@ Stop all players.
 
     /pyBinSimStopAllPlayers
 
+
+Create a new player. Players can play back files independent from each other. A
+player's output is sent to the start channel and consecutive channels, up to the
+channel count of the current sound file. If a player with the same name is
+already present, a new one with the same name will be created and used instead. 
+
+::
+
+    /pyBinSimPlay {soundfile_list: string} {start_channel: int32 = 0} {loop: string["loop"|"single"] = "single"} {player_name: string|int32|float32 = soundfile_list} {volume: float32 = 1.0} {play: string["play"|"pause"] = "play"}   
+
+
+Pause, stop or start a player.
+
+::
+
+    /pyBinSimPlayerControl {player_name: string} {play: string["play"|"pause"|"stop"]}
+
+
+Change the output channel of a player.
+
+::
+
+    /pyBinSimPlayerChannel {player_name: string} {start channel: int32} 
+
+
+Change the volume of a player.
+
+::
+
+    /pyBinSimPlayerVolume {player_name: string} {volume: float32|int32}
+
+
+Stop all players.
+
+::
+
+    /pyBinSimStopAllPlayers
+
 Signal Flowchart
 ------------------------------
 

@@ -22,11 +22,11 @@
 
 import logging
 from timeit import default_timer
-
-import numpy as np
+from typing import List
+import math
 import torch
-from copy import deepcopy
 
+from pybinsim.filterstorage import Filter
 
 class ConvolverTorch(object):
     """
@@ -34,7 +34,7 @@ class ConvolverTorch(object):
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size, block_size, headphoneEQ, sources, interpolate, torch_settings):
+    def __init__(self, ir_size: int, block_size: int, headphoneEQ: bool, sources: int, interpolate: bool, torch_settings: str):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.ConvolverTorch")
@@ -56,47 +56,45 @@ class ConvolverTorch(object):
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
 
-        # Crossfade window for output blocks
-        self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
-        self.crossFadeOut = np.square(np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
-        self.crossFadeIn = np.flipud(self.crossFadeOut)
-        self.crossFadeOut = torch.as_tensor(self.crossFadeOut, dtype=torch.float32, device=self.torch_device)
-        self.crossFadeIn = torch.as_tensor(np.copy(self.crossFadeIn), dtype=torch.float32, device=self.torch_device)
+        block_time_in_samples = torch.arange(0, self.block_size, dtype=torch.float32)
+        crossFadeOut = torch.square(torch.cos(block_time_in_samples/(self.block_size-1)*(torch.tensor(math.pi)/2)))
+        crossFadeIn = torch.flipud(crossFadeOut)
+        self.crossFadeIn = torch.as_tensor(crossFadeIn, dtype=torch.float32, device=self.torch_device)
+        self.crossFadeOut = torch.as_tensor(crossFadeOut, dtype=torch.float32, device=self.torch_device)
 
-        # Filter format: [nBlocks*sources,blockSize*2]
-        self.left_filters_blocked = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        # Filter format: [2, nBlocks*sources, blockSize+1] (2 for left, right)
+        self.filters_blocked = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
-        self.right_filters_blocked = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        
+        self.filters_cpu = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+                                           device="cpu")
+        if self.torch_device.type == "cuda":
+            self.filters_cpu = self.filters_cpu.pin_memory()
+
+        self.complex_buffer = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
 
-        self.left_previous_filters_blocked = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
-                                           device=self.torch_device)
-        self.right_previous_filters_blocked = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.previous_filters_blocked = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
 
-        self.left_FDL = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
-                               device=self.torch_device)
-        self.right_FDL = torch.zeros(self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.temp = self.previous_filters_blocked
+
+        self.frequency_domain_input = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
                                device=self.torch_device)
 
         # Arrays for the result of the complex multiply and add
-        self.resultLeftFreq = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
-        self.resultRightFreq = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
-        self.resultLeftFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
-        self.resultRightFreqPrevious = torch.zeros(self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
+        self.resultFreq = torch.zeros(2, 1, self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
 
         # Result of the ifft is stored here
-        self.outputEmpty = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputLeft = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputRight = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputLeft_previous = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
-        self.outputRight_previous = torch.zeros(1, self.block_size, dtype=torch.float32, device=self.torch_device)
+        self.outputEmpty = torch.zeros(2, 1, self.block_size, dtype=torch.float32, device=self.torch_device)
 
+        self.irfft_buffer1 = torch.zeros(2, 1, self.block_size*2, dtype=torch.float32, device=self.torch_device)
+        self.irfft_buffer2 = torch.zeros(2, 1, self.block_size*2, dtype=torch.float32, device=self.torch_device)
 
         # Counts how often process() is called
         self.processCounter = 0
 
-        self.inUse = False
+        self.active = True
 
         self.interpolate = interpolate
 
@@ -111,106 +109,63 @@ class ConvolverTorch(object):
         """
         return self.processCounter
 
-    def setIR(self, sourceId, current_filter):
-        """
-        Hand over a new set of filters to the convolver
-        and define if you want to perform an interpolation/crossfade
-
-        :param current_filter:
-        :param do_interpolation:
-        :return: None
-        """
+    def setAllFilters(self, filters: List[Filter]):
         self.saveOldFilters()
+        # start copy on GPU
+        # ready temp with current values and make current, previous will just keep the current values
+        self.temp.copy_(self.filters_blocked, non_blocking=True)
 
-        left, right = current_filter.getFilterFD()
-        self.left_filters_blocked[sourceId::self.sources, ] = \
-            torch.as_tensor(left, dtype=torch.complex64, device=self.torch_device)
-        self.right_filters_blocked[sourceId::self.sources, ] = \
-            torch.as_tensor(right, dtype=torch.complex64, device=self.torch_device)
+        # swap previous and current
+        self.filters_blocked = self.temp
+        # make sure previous is still kept in temp, so we can later reassign previous
+        self.temp = self.previous_filters_blocked
 
-    def activate(self, state):
-        self.inUse = state
+        # assemble new filter Tensors on CPU in pinned memory
+        for i in range(self.sources):
+            self.filters_cpu[:, i::self.sources, :] = filters[i].getFilterFD()
+
+        # write new filters to GPU
+        self.filters_blocked.copy_(self.filters_cpu, non_blocking=True)
 
     def saveOldFilters(self):
-        # Save old filters in case interpolation is needed
-        #print(torch.all(torch.eq(self.left_previous_filters_blocked, self.left_filters_blocked)))
-
-        self.left_previous_filters_blocked = deepcopy(self.left_filters_blocked)
-        self.right_previous_filters_blocked = deepcopy(self.right_filters_blocked)
-
-    def process_nothing(self):
-        """
-        Just for testing
-        :return: None
-        """
-
-        self.outputLeft = self.outputEmpty
-        self.outputRight = self.outputEmpty
-
+        self.previous_filters_blocked = self.filters_blocked
 
     def process(self, input_buffer):
-        """
-        Main function
+        if not self.active:
+            return self.outputEmpty
 
-        :param block:
-        :return: (outputLeft, outputRight)
-        """
+        # shift frequency_domain_inputs
+        self.frequency_domain_input = torch.roll(self.frequency_domain_input, self.sources, dims=1)
 
-        if not self.inUse:
-            self.process_nothing()
+        # copy input buffers to frequency_domain_inputs
+        if self.headphoneEQ:
+            self.frequency_domain_input[:, :self.sources, :] = input_buffer
         else:
-            # Fill FDL's with need data from input buffer(s)
-            if self.processCounter > 0:
-                # shift FDLs
-                self.left_FDL = torch.roll(self.left_FDL, self.sources, dims=0)
-                self.right_FDL = torch.roll(self.right_FDL, self.sources, dims=0)
+            self.frequency_domain_input[0, :self.sources, :] = input_buffer
+            self.frequency_domain_input[1, :self.sources, :] = input_buffer
 
-            # copy input buffers to FDLs
-            if self.headphoneEQ:
-                self.left_FDL[:self.sources, ] = input_buffer[0, ]
-                self.right_FDL[:self.sources, ] = input_buffer[1, ]
-            else:
-                self.left_FDL[:self.sources, ] = input_buffer
-                self.right_FDL[:self.sources, ] = input_buffer
+        output = self.multiply_accumulate_ifft(self.filters_blocked, self.irfft_buffer1)
 
+        if self.interpolate:
+            output_previous = self.multiply_accumulate_ifft(self.previous_filters_blocked, self.irfft_buffer2)
+            output.mul_(self.crossFadeIn)
+            output_previous.mul_(self.crossFadeOut)
+            output.add_(output_previous)
 
-
-            # Second: Multiplication with IR block und accumulation
-            self.resultLeftFreq = torch.sum(torch.multiply(self.left_filters_blocked, self.left_FDL), keepdim=True, dim=0)
-            self.resultRightFreq = torch.sum(torch.multiply(self.right_filters_blocked, self.right_FDL), keepdim=True, dim=0)
-
-
-            # Third: Transformation back to time domain
-            #test=torch.fft.irfft(self.resultLeftFreq)
-            self.outputLeft = torch.fft.irfft(self.resultLeftFreq)[:, self.block_size:self.block_size * 2]
-            self.outputRight = torch.fft.irfft(self.resultRightFreq)[:, self.block_size:self.block_size * 2]
-
-
-            if self.interpolate:
-                self.resultLeftFreqPrevious = torch.sum(torch.multiply(self.left_previous_filters_blocked, self.left_FDL),
-                                                keepdim=True, dim=0)
-                self.resultRightFreqPrevious = torch.sum(torch.multiply(self.right_previous_filters_blocked, self.right_FDL),
-                                                 keepdim=True, dim=0)
-
-                self.outputLeft_previous = torch.fft.irfft(self.resultLeftFreqPrevious)[:, self.block_size:self.block_size * 2]
-                self.outputRight_previous = torch.fft.irfft(self.resultRightFreqPrevious)[:, self.block_size:self.block_size * 2]
-
-
-                # fade over full block size
-                self.outputLeft = torch.add(torch.multiply(self.outputLeft, self.crossFadeIn),
-                                        torch.multiply(self.outputLeft_previous, self.crossFadeOut))
-
-                self.outputRight = torch.add(torch.multiply(self.outputRight, self.crossFadeIn),
-                                         torch.multiply(self.outputRight_previous, self.crossFadeOut))
-
-            # Save previous filters
-            self.saveOldFilters()
+        # Save previous filters
+        self.saveOldFilters()
 
         self.processCounter += 1
 
-        return self.outputLeft, self.outputRight
+        return output
+
+    def multiply_accumulate_ifft(self, filters_blocked, irfft_buffer):
+            torch.multiply(filters_blocked, self.frequency_domain_input, out=self.complex_buffer)
+            
+            # accumulate over blocks and channels for each time and left/right
+            torch.sum(self.complex_buffer, keepdim=True, dim=1, out=self.resultFreq)
+
+            return torch.fft.irfft(self.resultFreq, out=irfft_buffer, dim=2)[:, :, self.block_size:self.block_size * 2]
 
     def close(self):
-        pass
-        #print("Convolver: close")
-        # TODO: do something here?
+        self.log.info("Convolver: close")

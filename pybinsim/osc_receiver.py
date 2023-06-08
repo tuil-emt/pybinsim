@@ -23,11 +23,11 @@
 import logging
 import threading
 import numpy as np
-from pathlib import Path
+from time import perf_counter_ns
 
 from pythonosc import dispatcher
 from pythonosc import osc_server
-from pybinsim.parsing import parse_soundfile_list
+from pybinsim.parsing import parse_boolean, parse_soundfile_list
 
 from pybinsim.soundhandler import PlayState, SoundHandler, LoopState
 
@@ -112,17 +112,21 @@ class OscReceiver(object):
         osc_dispatcher_misc.map("/pyBinSimPlayerVolume", self.handle_player_volume)
         osc_dispatcher_misc.map("/pyBinSimStopAllPlayers", self.handle_stop_all_players)
 
-        self.server = osc_server.ThreadingOSCUDPServer(
+        self.server = osc_server.BlockingOSCUDPServer(
             (self.ip, self.port1), osc_dispatcher_ds)
 
-        self.server2 = osc_server.ThreadingOSCUDPServer(
+        self.server2 = osc_server.BlockingOSCUDPServer(
             (self.ip, self.port2), osc_dispatcher_early)
 
-        self.server3 = osc_server.ThreadingOSCUDPServer(
+        self.server3 = osc_server.BlockingOSCUDPServer(
             (self.ip, self.port3), osc_dispatcher_late)
 
-        self.server4 = osc_server.ThreadingOSCUDPServer(
+        self.server4 = osc_server.BlockingOSCUDPServer(
             (self.ip, self.port4), osc_dispatcher_misc)
+        
+        self.record_audio_callback_benchmark_data = current_config.get('audio_callback_benchmark')
+        if self.record_audio_callback_benchmark_data:
+            self.times_azimuth_received = list()
 
     def select_slice(self, i):
         switcher = {
@@ -178,6 +182,9 @@ class OscReceiver(object):
             
         #self.log.info("Channel: {}".format(str(channel)))
         #self.log.info("Current Filter List: {}".format(str(self.valueList_filter[current_channel, :])))
+
+        if self.record_audio_callback_benchmark_data and args[0] > -178:
+            self.times_azimuth_received.append((args[0], perf_counter_ns()))
 
     def handle_early_filter_input(self, identifier, channel, *args):
         """
@@ -348,6 +355,9 @@ class OscReceiver(object):
         """ Handler for playback control"""
         assert identifier == "/pyBinSimPauseAudioPlayback"
 
+        value = parse_boolean(value)
+        if value is None:
+            raise Exception("Argument for /pyBinSimPauseAudioPlayback was not a boolean")
         self.currentConfig.set('pauseAudioPlayback', value)
         self.log.info("Pausing audio")
 
@@ -355,6 +365,9 @@ class OscReceiver(object):
         """ Handler for playback control"""
         assert identifier == "/pyBinSimPauseConvolution"
 
+        value = parse_boolean(value)
+        if value is None:
+            raise Exception("Argument for /pyBinSimPauseConvolution was not a boolean")
         self.currentConfig.set('pauseConvolution', value)
         self.log.info("Pausing convolution")
 
@@ -362,7 +375,7 @@ class OscReceiver(object):
         """ Handler for loudness control"""
         assert identifier == "/pyBinSimLoudness"
 
-        self.currentConfig.set('loudnessFactor', value)
+        self.currentConfig.set('loudnessFactor', float(value))
         self.log.info("Changing loudness")
 
     def start_listening(self):
@@ -438,3 +451,8 @@ class OscReceiver(object):
         self.server2.shutdown()
         self.server3.shutdown()
         self.server4.shutdown()
+
+    def get_times_azimuth_received_and_reset(self):
+        result = self.times_azimuth_received
+        self.times_azimuth_received = list()
+        return result
