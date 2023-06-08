@@ -30,28 +30,13 @@ import sounddevice as sd
 
 from pybinsim.convolver import ConvolverTorch
 from pybinsim.filterstorage import FilterStorage
-from pybinsim.osc_receiver import OscReceiver
+from pybinsim.osc_receiver import CONFIG_SOUNDFILE_PLAYER_NAME, OscReceiver
+from pybinsim.parsing import parse_boolean, parse_soundfile_list
 from pybinsim.pose import Pose
-from pybinsim.soundhandler import SoundHandler
+from pybinsim.soundhandler import SoundHandler, LoopState
 from pybinsim.input_buffer import InputBufferMulti
 
-import timeit
 import torch
-
-def parse_boolean(any_value):
-
-    #if type(any_value) == bool:
-    #    return any_value
-
-    # str -> bool
-    if type(any_value) == str:
-        if any_value == 'True':
-            return True
-        if any_value == 'False':
-            return False
-    else:
-        return any_value
-
 
 class BinSimConfig(object):
     def __init__(self):
@@ -216,17 +201,18 @@ class BinSim(object):
                                       late_size,
                                       sd_size)
 
-        # Start an oscReceiver
-        oscReceiver = OscReceiver(self.config)
-        oscReceiver.start_listening()
-        time.sleep(1)
-
         # Create SoundHandler
         soundHandler = SoundHandler(self.blockSize, self.nChannels,
-                                    self.sampleRate, self.config.get('loopSound'))
+                                    self.sampleRate)
 
-        soundfile_list = self.config.get('soundfile')
-        soundHandler.request_new_sound_file(soundfile_list)
+        soundfiles = parse_soundfile_list(self.config.get('soundfile'))
+        loop_config = LoopState.LOOP if self.config.get('loopSound') else LoopState.SINGLE
+        soundHandler.create_player(soundfiles, CONFIG_SOUNDFILE_PLAYER_NAME, loop_state=loop_config)
+
+        # Start an oscReceiver
+        oscReceiver = OscReceiver(self.config, soundHandler)
+        oscReceiver.start_listening()
+        time.sleep(1)
 
         # Create input buffers
         input_Buffer = InputBufferMulti(self.blockSize,  self.nChannels, self.config.get('torchConvolution[cpu/cuda]'))
@@ -279,7 +265,6 @@ class BinSim(object):
             if self.convolverHP:
                 self.convolverHP.close()
 
-
 def audio_callback(binsim):
     """ Wrapper for callback to hand over custom data """
     assert isinstance(binsim, BinSim)
@@ -296,27 +281,21 @@ def audio_callback(binsim):
         # Update config
         binsim.current_config = binsim.oscReceiver.get_current_config()
 
-        # Update audio files
-        current_soundfile_list = binsim.oscReceiver.get_sound_file_list()
-        if current_soundfile_list:
-            binsim.soundHandler.request_new_sound_file(current_soundfile_list)
-
-        # Get sound block. At least one convolver should exist
-        amount_channels = binsim.soundHandler.get_sound_channels()
+        amount_channels = binsim.current_config.get('maxChannels')
         if amount_channels == 0:
             return
 
         if binsim.current_config.get('pauseAudioPlayback'):
-            binsim.block[:amount_channels, :] = torch.as_tensor(binsim.soundHandler.read_zeros(), dtype=torch.float32, device=binsim.config.get('torchConvolution[cpu/cuda]'))
+            binsim.block[...] = torch.as_tensor(binsim.soundHandler.get_zeros(), dtype=torch.float32, device=binsim.config.get('torchConvolution[cpu/cuda]'))
         else:
-            binsim.block[:amount_channels, :] = torch.as_tensor(binsim.soundHandler.buffer_read(), dtype=torch.float32, device=binsim.config.get('torchConvolution[cpu/cuda]'))
+            loudness = callback.config.get('loudnessFactor')
+            binsim.block[...] = torch.as_tensor(binsim.soundHandler.get_block(loudness), dtype=torch.float32, device=binsim.config.get('torchConvolution[cpu/cuda]'))
 
         if binsim.current_config.get('pauseConvolution'):
-
-            if binsim.soundHandler.get_sound_channels() == 2:
+            if amount_channels == 2:
                 binsim.result = binsim.block
             else:
-                mix = torch.mean(binsim.block[:binsim.soundHandler.get_sound_channels(), :], dim=0)
+                mix = torch.mean(binsim.block[:amount_channels, :], dim=0)
                 binsim.result[0, :] = mix
                 binsim.result[1, :] = mix
         else:
@@ -355,10 +334,6 @@ def audio_callback(binsim):
             if callback.config.get('useHeadphoneFilter'):
                 result_buffer = binsim.input_BufferHP.process(binsim.result)
                 binsim.result[0, :], binsim.result[1, :] = binsim.convolverHP.process(result_buffer)
-
-        # Scale data
-        # binsim.result = np.divide(binsim.result, float((amount_channels) * 2))
-        binsim.result = torch.multiply(binsim.result, callback.config.get('loudnessFactor')/float((amount_channels)))
 
         outdata[:] = np.transpose(binsim.result.detach().cpu().numpy())
 

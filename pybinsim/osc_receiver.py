@@ -23,20 +23,28 @@
 import logging
 import threading
 import numpy as np
+from pathlib import Path
 
 from pythonosc import dispatcher
 from pythonosc import osc_server
+from pybinsim.parsing import parse_soundfile_list
 
+from pybinsim.soundhandler import PlayState, SoundHandler, LoopState
+
+CONFIG_SOUNDFILE_PLAYER_NAME = "config_soundfile"
 
 class OscReceiver(object):
     """
     Class for receiving OSC Messages to control pyBinSim
+
+    To start the servers on daemon threads, call the method `start_listening`. 
     """
 
-    #def __init__(self):
-    def __init__(self,current_config):
+    def __init__(self, current_config, soundhandler: SoundHandler):
         self.log = logging.getLogger("pybinsim.OscReceiver")
         self.log.info("oscReceiver: init")
+
+        self.soundhandler = soundhandler
 
         # Basic settings
         self.ip = '127.0.0.1'
@@ -62,11 +70,6 @@ class OscReceiver(object):
         self.valueList_early_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
         self.valueList_late_filter = np.tile(self.default_filter_value, [self.maxChannels, 1])
         self.valueList_sd_filter = np.tile(self.default_sd_filter_value, [self.maxChannels, 1])
-
-
-        # self.valueList = [()] * self.maxChannels
-        self.soundFileList = ''
-        self.soundFileNew = False
 
         osc_dispatcher_ds = dispatcher.Dispatcher()
 
@@ -103,6 +106,11 @@ class OscReceiver(object):
         osc_dispatcher_misc.map("/pyBinSimPauseConvolution", self.handle_convolution_pause)
         osc_dispatcher_misc.map("/pyBinSim_sd_Filter", self.handle_sd_filter_input)
         osc_dispatcher_misc.map("/pyBinSimLoudness", self.handle_loudness)
+        osc_dispatcher_misc.map("/pyBinSimPlay", self.handle_play)
+        osc_dispatcher_misc.map("/pyBinSimPlayerControl", self.handle_player_control)
+        osc_dispatcher_misc.map("/pyBinSimPlayerChannel", self.handle_player_channel)
+        osc_dispatcher_misc.map("/pyBinSimPlayerVolume", self.handle_player_volume)
+        osc_dispatcher_misc.map("/pyBinSimStopAllPlayers", self.handle_stop_all_players)
 
         self.server = osc_server.ThreadingOSCUDPServer(
             (self.ip, self.port1), osc_dispatcher_ds)
@@ -251,14 +259,91 @@ class OscReceiver(object):
         # self.log.info("Current Filter List: {}".format(str(self.valueList_filter[current_channel, :])))
 
     def handle_file_input(self, identifier, soundpath):
-        """ Handler for playlist control"""
-
         assert identifier == "/pyBinSimFile"
-        # assert type(soundpath) == 'str'
-
+        assert type(soundpath) == str
+        self.soundhandler.stop_all_players()
+        self.soundhandler.create_player(
+            parse_soundfile_list(soundpath),
+            CONFIG_SOUNDFILE_PLAYER_NAME,
+            loop_state=LoopState.LOOP if self.currentConfig.get('loopSound') else LoopState.SINGLE
+        )
         self.log.info("soundPath: {}".format(soundpath))
-        self.soundFileList = soundpath
         
+    def handle_play(self, identifier, soundfile_list, start_channel=0, loop="single", player_name=None, volume=1.0, play="play"):
+        assert identifier == "/pyBinSimPlay"
+
+        if player_name is None:
+            player_name = soundfile_list
+
+        # API type validation
+        assert type(soundfile_list ) == str
+        assert type(start_channel) == int
+        assert type(loop) == str
+        volume = float(volume)
+        assert type(play) == str
+
+        # parsing
+        filepaths = parse_soundfile_list(soundfile_list)
+        
+        if loop == 'loop':
+            loop_state = LoopState.LOOP
+        elif loop == 'single':
+            loop_state = LoopState.SINGLE
+        else:
+            raise ValueError("loop argument must be 'loop' or 'single'")
+
+        if play == 'play':
+            play_state = PlayState.PLAYING
+        elif play == 'pause':
+            play_state = PlayState.PAUSED
+        else:
+            raise ValueError("play argument must be 'play' or 'pause'")
+
+        self.soundhandler.create_player(filepaths, player_name, start_channel, loop_state, play_state, volume)
+        self.log.info("starting player '%s' at channel %d, %s, %s, volume %f", 
+                      player_name, start_channel, loop_state, play_state, volume)
+
+
+    def handle_player_control(self, identifier, player_name, play):
+        assert identifier == "/pyBinSimPlayerControl"
+
+        if play == 'play':
+            play_state = PlayState.PLAYING
+        elif play == 'pause':
+            play_state = PlayState.PAUSED
+        elif play == 'stop':
+            play_state = PlayState.STOPPED
+        else:
+            raise ValueError("play argument must be 'play', 'pause' or 'stop'")
+
+        self.soundhandler.get_player(player_name).play_state = play_state
+        self.log.info("setting player '%s' to %s", player_name, play_state)
+
+
+    def handle_player_channel(self, identifier, player_name, channel):
+        assert identifier == "/pyBinSimPlayerChannel"
+
+        assert type(channel) == int
+
+        self.soundhandler.set_player_start_channel(player_name, channel)
+        self.log.info("setting player '%s' to channel %d", player_name, channel)
+
+    
+    def handle_player_volume(self, identifier, player_name, volume):
+        assert identifier == "/pyBinSimPlayerVolume"
+
+        volume = float(volume)
+
+        self.soundhandler.set_player_volume(player_name, volume)
+        self.log.info("setting player '%s' to volume %f", player_name, volume)
+
+
+    def handle_stop_all_players(self, identifier):
+        assert identifier == "/pyBinSimStopAllPlayers"
+
+        self.soundhandler.stop_all_players()
+        self.log.info("stopping all players")
+
     def handle_audio_pause(self, identifier, value):
         """ Handler for playback control"""
         assert identifier == "/pyBinSimPauseAudioPlayback"
@@ -342,11 +427,6 @@ class OscReceiver(object):
     def get_current_config(self):
         return self.currentConfig
 
-    def get_sound_file_list(self):
-        ret_list = self.soundFileList
-        self.soundFileList = ''
-        return ret_list
-
     def close(self):
         """
         Close the osc receiver
@@ -355,3 +435,6 @@ class OscReceiver(object):
         """
         self.log.info('oscReiver: close()')
         self.server.shutdown()
+        self.server2.shutdown()
+        self.server3.shutdown()
+        self.server4.shutdown()
