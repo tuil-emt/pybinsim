@@ -51,6 +51,8 @@ class InputBufferMulti(object):
         # Create Input Buffers
         self.buffer = torch.zeros(self.inputs, self.block_size * 2, dtype=torch.float32, device=self.torch_device)
 
+        self.fft_buffer = torch.zeros(self.inputs, self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
+
         self.processCounter = 0
 
         end = default_timer()
@@ -72,29 +74,28 @@ class InputBufferMulti(object):
         """
         self.processCounter += 1
 
-    def fill_buffer(self, block):
+    def fill_buffer(self, block: torch.Tensor):
         """
         Copy mono soundblock to input Buffer;
         Transform to Freq. Domain and store result in FDLs
         :param block: Mono sound block
         :return: None
         """
-
-        if self.processCounter > 0:
-            # shift buffer
-            self.buffer[:, :self.block_size] = self.buffer[:, self.block_size:]
+        # shift buffer
+        self.buffer[:, :self.block_size] = self.buffer[:, self.block_size:]
 
         # insert new block to buffer
-        self.buffer[:, self.block_size:] = torch.as_tensor(block, dtype=torch.float32, device=self.torch_device)
+        self.buffer[:, self.block_size:] = block
 
-        return torch.fft.rfftn(self.buffer, dim=1)
+        torch.fft.rfftn(self.buffer, dim=1, out=self.fft_buffer)
+        return self.fft_buffer
 
-    def process(self, block):
+    def process(self, block: torch.Tensor):
         """
         Main function
 
         :param block:
-        :return: (outputLeft, outputRight)
+        :return: output
         """
         #print(block.shape[0])
         #if block.shape[1] < self.block_size:
@@ -108,5 +109,5 @@ class InputBufferMulti(object):
         return output
 
     def close(self):
-        print("Input_buffer: close")
+        self.log.info("Input_buffer: close")
 

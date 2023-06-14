@@ -57,15 +57,22 @@ class ZmqReceiver(PkgReceiver):
             "/pyBinSim_late_Filter_Orientation": self.handle_late_filter_input,
             "/pyBinSim_late_Filter_Position": self.handle_late_filter_input,
             "/pyBinSim_late_Filter_Custom": self.handle_late_filter_input,
+            # source directivity
+            "/pyBinSim_sd_Filter": self.handle_sd_filter_input,
             # other
             "/pyBinSimFile": self.handle_file_input,
+            "/pyBinSimPlay": self.handle_play,
+            "/pyBinSimPlayerControl": self.handle_player_control,
+            "/pyBinSimPlayerChannel": self.handle_player_channel,
+            "/pyBinSimPlayerVolume": self.handle_player_volume,
+            "/pyBinSimStopAllPlayers": self.handle_stop_all_players,
             "/pyBinSimPauseAudioPlayback": self.handle_audio_pause,
             "/pyBinSimPauseConvolution": self.handle_convolution_pause,
             "/pyBinSimMultiCommand": self.handle_multi_command,
         }
 
         self.run_thread = False
-        self.zmq_thread = threading.Thread(target=self.listen, args=(self.proto, self.ip, self.port))
+        self.zmq_thread = threading.Thread(target=self.listen, args=(self.proto, self.ip, str(self.port)))
 
     def start_listening(self):
         """Start osc receiver in background Thread"""
@@ -91,7 +98,7 @@ class ZmqReceiver(PkgReceiver):
     #     DISH belongs to one or several groups from which it can receive messages. It can not send.
     #     RADIO can send messages to any group (there still needs to be a connection between RADIO and DISH).
     # NOTE: DISH-RADIO connections only exist as drafts for now
-    def listen(self, protocol, ip, port):
+    def listen(self, protocol: str, ip: str, port: str):
         zmq_context = zmq.Context.instance()
 
         # Choose DISH-RADIO pattern if using UDP
