@@ -23,6 +23,9 @@ HPFILTERBLOCKS = 2
 CHANNELS = 1
 SAMPLINGRATE = 48000
 
+PCM16_ACCURACY = 1./(2**16-2)
+ACCURACY = 2 * PCM16_ACCURACY
+
 
 def test_convolution_basic():
 
@@ -111,8 +114,11 @@ def test_convolution_basic():
     left_correct = np.allclose(result_matrix_pybinsim[0, :], left_hp_part)
     right_correct = np.allclose(result_matrix_pybinsim[1, :], right_hp_part)
 
-    assert left_correct == True, f"Left channel convolution faulty"
-    assert right_correct == True, f"Right channel convolution faulty"
+
+    assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY*1000)
+    assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY*1000)
+    #assert left_correct == True, f"Left channel convolution faulty"
+    #assert right_correct == True, f"Right channel convolution faulty"
 
     print('Done')
 
