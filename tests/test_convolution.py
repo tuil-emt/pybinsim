@@ -11,6 +11,7 @@ import torch
 import wave
 from pathlib import Path
 from pytest import approx, raises
+import soundfile as sf
 
 
 BLOCKSIZE = 512
@@ -85,6 +86,7 @@ def test_convolution_basic():
     ## Second: numpy convolution
 
     # Read file to get buffer
+    '''
     ifile = wave.open(soundfilename)
     samples = ifile.getnframes()
     audio = ifile.readframes(samples)
@@ -96,6 +98,9 @@ def test_convolution_basic():
     # Normalise float32 array so that values are between -1.0 and +1.0
     max_int16 = 2 ** 15
     audio_normalised = audio_as_np_float32 / max_int16
+    '''
+    audio_normalised, fs = sf.read(soundfilename, dtype='float32')
+    audio_normalised = np.divide(audio_normalised,np.max(np.abs(audio_normalised)))
 
     # Convolution
     left = np.convolve(audio_normalised,test_filter[:,0])
@@ -115,8 +120,8 @@ def test_convolution_basic():
     right_correct = np.allclose(result_matrix_pybinsim[1, :], right_hp_part)
 
 
-    assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY*1000)
-    assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY*1000)
+    assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY*100)
+    assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY*100)
     #assert left_correct == True, f"Left channel convolution faulty"
     #assert right_correct == True, f"Right channel convolution faulty"
 
