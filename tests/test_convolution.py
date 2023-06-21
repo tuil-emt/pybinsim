@@ -44,7 +44,7 @@ def test_convolution_basic():
     input_BufferHP = InputBufferMulti(BLOCKSIZE, 2, 'cpu')
     input_Buffer = InputBufferMulti(BLOCKSIZE, 1, 'cpu')
 
-    convolver = ConvolverTorch(FILTERSIZE, BLOCKSIZE, False, 1, False, 'cpu')
+    convolver = ConvolverTorch(FILTERSIZE, BLOCKSIZE, False, 1, True, 'cpu')
     convolver.active = 'True'
     convolverHP = ConvolverTorch(HPFILTERSIZE, BLOCKSIZE, True, 2, False, 'cpu')
     convolverHP.active = 'True'
@@ -66,6 +66,7 @@ def test_convolution_basic():
 
     # Set filters for convolvers
     convolver.setAllFilters([filter])
+    convolver.setAllFilters([filter]) #set filter twice to test block interpolation
     convolverHP.setAllFilters([hpfilter])
 
     # Run for some blocks
@@ -112,8 +113,8 @@ def test_convolution_basic():
     # print(left_hp_part[1455])
     # print(result_matrix_pybinsim[0, 1574])
     # print(left_hp_part[1574])
-    # print(result_matrix_pybinsim[0, 1876])
-    # print(left_hp_part[1876])
+    #print(result_matrix_pybinsim[0, 1876])
+    #print(left_hp_part[1876])
 
     assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=PCM16_ACCURACY*1)
     assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=PCM16_ACCURACY*1)
