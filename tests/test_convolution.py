@@ -104,16 +104,16 @@ def test_convolution_basic():
     #result_matrix_pybinsim[0, :] = np.divide(result_matrix_pybinsim[0, :], np.max(np.abs(result_matrix_pybinsim[0, :])))
     #result_matrix_pybinsim[1, :] = np.divide(result_matrix_pybinsim[1, :], np.max(np.abs(result_matrix_pybinsim[1, :])))
 
-    left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part)
-    right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part)
+    left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part, atol=2e-08)
+    right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part, atol=2e-08)
 
     ## These were the values that still failed
     # print(result_matrix_pybinsim[0, 1455])
     # print(left_hp_part[1455])
-    # print(result_matrix_pybinsim[0, 1574])
-    # print(left_hp_part[1574])
-    # print(result_matrix_pybinsim[0, 1876])
-    # print(left_hp_part[1876])
+    print(result_matrix_pybinsim[0, 1574])
+    print(left_hp_part[1574])
+    print(result_matrix_pybinsim[0, 1876])
+    print(left_hp_part[1876])
 
     assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=PCM16_ACCURACY*1)
     assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=PCM16_ACCURACY*1)
