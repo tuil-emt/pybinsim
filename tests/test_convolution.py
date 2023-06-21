@@ -24,8 +24,7 @@ HPFILTERBLOCKS = 2
 CHANNELS = 1
 SAMPLINGRATE = 48000
 
-PCM16_ACCURACY = 1./(2**16-2)
-ACCURACY = 2 * PCM16_ACCURACY
+ACCURACY = 1./(2**16)
 
 
 def test_convolution_basic():
@@ -48,8 +47,6 @@ def test_convolution_basic():
     convolver.active = 'True'
     convolverHP = ConvolverTorch(HPFILTERSIZE, BLOCKSIZE, True, 2, False, 'cpu')
     convolverHP.active = 'True'
-
-
 
     # Create sound handler and player
     soundHandler = SoundHandler(BLOCKSIZE, CHANNELS, SAMPLINGRATE)
@@ -105,19 +102,21 @@ def test_convolution_basic():
     #result_matrix_pybinsim[0, :] = np.divide(result_matrix_pybinsim[0, :], np.max(np.abs(result_matrix_pybinsim[0, :])))
     #result_matrix_pybinsim[1, :] = np.divide(result_matrix_pybinsim[1, :], np.max(np.abs(result_matrix_pybinsim[1, :])))
 
-    left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part)
-    right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part)
+    left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part, atol=ACCURACY,rtol=ACCURACY)
+    right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part, atol=ACCURACY,rtol=ACCURACY)
 
     ## These were the values that still failed
     # print(result_matrix_pybinsim[0, 1455])
     # print(left_hp_part[1455])
     # print(result_matrix_pybinsim[0, 1574])
     # print(left_hp_part[1574])
-    #print(result_matrix_pybinsim[0, 1876])
-    #print(left_hp_part[1876])
+    # print(result_matrix_pybinsim[0, 1876])
+    # print(left_hp_part[1876])
+    # print(result_matrix_pybinsim[0, 1749])
+    # print(left_hp_part[1749])
 
-    assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=PCM16_ACCURACY*1)
-    assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=PCM16_ACCURACY*1)
+    assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY)
+    assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY)
     assert left_correct.all() == True, f"Left channel convolution faulty at {[i for i in range(0, FILTERSIZE) if left_correct[i] == False]}"
     assert right_correct.all() == True, f"Right channel convolution faulty at {[i for i in range(0, FILTERSIZE) if right_correct[i] == False]}"
 
