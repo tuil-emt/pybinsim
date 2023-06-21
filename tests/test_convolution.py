@@ -37,7 +37,7 @@ def test_convolution_basic():
     test_hp_filter = np.zeros((HPFILTERSIZE, 2))
     test_hp_filter[0,0] = 1
     test_hp_filter[0,1] = 1
-    soundfilename = "example/signals/speech2_48000_mono.wav"
+    soundfilename = "../example/signals/speech2_48000_mono.wav"
 
     ## First: Pybinsim convolution
     # Create input buffer, convolver
@@ -60,15 +60,12 @@ def test_convolution_basic():
     # Create a filter list
     filter = Filter(test_filter, FILTERBLOCKS, BLOCKSIZE, 'cpu')
     filter.storeInFDomain()
-    filterList = list()
-    filterList.append(filter)
 
     hpfilter = Filter(test_hp_filter, HPFILTERBLOCKS, BLOCKSIZE, 'cpu')
     hpfilter.storeInFDomain()
 
-
     # Set filters for convolvers
-    convolver.setAllFilters(filterList)
+    convolver.setAllFilters([filter])
     convolverHP.setAllFilters([hpfilter])
 
     # Run for some blocks
@@ -85,36 +82,27 @@ def test_convolution_basic():
 
     ## Second: numpy convolution
 
-    # Read file to get buffer
-    '''
-    ifile = wave.open(soundfilename)
-    samples = ifile.getnframes()
-    audio = ifile.readframes(samples)
-
-    # Convert buffer to float32 using NumPy
-    audio_as_np_int16 = np.frombuffer(audio, dtype=np.int16)
-    audio_as_np_float32 = audio_as_np_int16.astype(np.float32)
-
-    # Normalise float32 array so that values are between -1.0 and +1.0
-    max_int16 = 2 ** 15
-    audio_normalised = audio_as_np_float32 / max_int16
-    '''
-    audio_normalised, fs = sf.read(soundfilename, dtype='float32')
-    audio_normalised = np.divide(audio_normalised,np.max(np.abs(audio_normalised)))
+    audio, fs = sf.read(soundfilename, dtype='float32')
+    #audio_normalised = np.divide(audio,np.max(np.abs(audio)))
 
     # Convolution
-    left = np.convolve(audio_normalised,test_filter[:,0])
-    right = np.convolve(audio_normalised, test_filter[:, 1])
+    left = np.convolve(audio,test_filter[:,0])
+    right = np.convolve(audio, test_filter[:, 1])
 
     left_hp = np.convolve(left,test_hp_filter[:,0])
     right_hp = np.convolve(right, test_hp_filter[:,1])
 
-    # Normalize and Compare
-    left_hp_part = np.float32(np.divide(left_hp[:(FILTERBLOCKS * BLOCKSIZE)],np.max(np.abs(left_hp[:(FILTERBLOCKS * BLOCKSIZE)]))))
-    right_hp_part = np.float32(np.divide(right_hp[:(FILTERBLOCKS * BLOCKSIZE)], np.max(np.abs(right_hp[:(FILTERBLOCKS * BLOCKSIZE)]))))
+    # Compare
+    compairison_range = FILTERBLOCKS * BLOCKSIZE
+    left_hp_part = left_hp[:compairison_range]
+    right_hp_part = right_hp[:compairison_range]
 
-    result_matrix_pybinsim[0, :] = np.divide(result_matrix_pybinsim[0, :],np.max(np.abs(result_matrix_pybinsim[0, :])))
-    result_matrix_pybinsim[1, :] = np.divide(result_matrix_pybinsim[1, :], np.max(np.abs(result_matrix_pybinsim[1, :])))
+    # Does normalization makes sense?
+    #left_hp_part = np.float32(np.divide(left_hp[:compairison_range],np.max(np.abs(left_hp[:compairison_range]))))
+    #right_hp_part = np.float32(np.divide(right_hp[:compairison_range], np.max(np.abs(right_hp[:compairison_range]))))
+
+    #result_matrix_pybinsim[0, :] = np.divide(result_matrix_pybinsim[0, :], np.max(np.abs(result_matrix_pybinsim[0, :])))
+    #result_matrix_pybinsim[1, :] = np.divide(result_matrix_pybinsim[1, :], np.max(np.abs(result_matrix_pybinsim[1, :])))
 
     left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part)
     right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part)
