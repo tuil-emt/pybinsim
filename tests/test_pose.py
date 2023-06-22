@@ -1,33 +1,37 @@
-from unittest import TestCase
+from pybinsim.pose import Orientation, Position, Custom, Pose
 
-from pybinsim.pose import Orientation, Position, Pose
+import pytest
 
+def test_create_key():
+    orientation = Orientation(10, 20, 30)
+    position = Position(1, 2, 3)
 
-class TestPose(TestCase):
-    def test_create_key(self):
-        orientation = Orientation('10','20','30')
-        position = Position('1','2','3')
+    pose = Pose(orientation, position)
 
-        pose = Pose(orientation, position)
+    assert orientation.pitch == 20
+    assert position.z == 3
+    assert pose.create_key() == (Orientation(10, 20, 30),
+                                 Position(1, 2, 3),
+                                 Orientation(0, 0, 0),
+                                 Position(0, 0, 0),
+                                 Custom(0, 0, 0))
 
-        self.assertEqual(orientation.pitch, '20')
-        self.assertEqual(position.z, '3')
+def test_from_filter_value_list_9():
+    pose = Pose.from_filterValueList([10, 20, 30, 1, 2, 3, 11, 22, 33])
 
-        self.assertEqual(pose.create_key(), "10,20,30,1,2,3,0,0,0")
+    assert pose.listener_orientation.yaw == 10
+    assert pose.listener_position.y == 2
+    assert pose.custom.c == 33
 
-    def test_from_filter_value_list_6(self):
+def test_from_filter_value_list_15():
+    pose = Pose.from_filterValueList([10, 20, 30, 1, 2, 3, 99, 88, 77, 9, 8, 7, 11, 22, 33])
 
-        pose = Pose.from_filterValueList([10, 20, 30, 1, 2, 3])
-        self.assertTrue(pose.orientation.yaw, 10)
-        self.assertTrue(pose.position.x, 1)
+    assert pose.listener_orientation.yaw == 10
+    assert pose.listener_position.y == 2
+    assert pose.source_orientation.roll == 77
+    assert pose.source_position.x == 9
+    assert pose.custom.a == 11
 
-    def test_from_filter_value_list_9(self):
-
-        pose = Pose.from_filterValueList([10, 20, 30, 1, 2, 3, 11, 22, 33])
-        self.assertTrue(pose.orientation.yaw, 10)
-        self.assertTrue(pose.position.x, 1)
-        self.assertTrue(pose.custom.b, 22)
-
-    def test_from_filter_value_invalid(self):
-        with self.assertRaises(RuntimeError):
-            Pose.from_filterValueList([1, 2, 3])
+def test_from_filter_value_invalid():
+    with pytest.raises(RuntimeError):
+        Pose.from_filterValueList([10, 20, 30, 1, 2, 3])
