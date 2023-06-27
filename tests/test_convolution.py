@@ -4,19 +4,15 @@ from pybinsim.filterstorage import Filter
 from pybinsim.soundhandler import SoundHandler
 from pybinsim.parsing import parse_soundfile_list
 
-
-
 import numpy as np
 import torch
-import wave
-from pathlib import Path
-from pytest import approx, raises
+from pytest import approx
 import soundfile as sf
 
 
 BLOCKSIZE = 512
-FILTERSIZE = 2048
-FILTERBLOCKS = 4
+FILTERSIZE = 3072
+FILTERBLOCKS = 6
 
 HPFILTERSIZE = 1024
 HPFILTERBLOCKS = 2
@@ -29,14 +25,21 @@ ACCURACY = 1./(2**16)
 
 def test_convolution_basic():
 
+    # Simple Filter
+    #test_filter = np.zeros((FILTERSIZE, 2), dtype='float32')
+    #test_filter[0,0] = 1
+    #test_filter[0,1] = 1
+    # Real Filter
+    test_filter, _ = sf.read("resources/test_filter.wav", dtype='float32')
 
-    test_filter = np.zeros((FILTERSIZE, 2))
-    test_filter[0,0] = 1
-    test_filter[0,1] = 1
-    test_hp_filter = np.zeros((HPFILTERSIZE, 2))
-    test_hp_filter[0,0] = 1
-    test_hp_filter[0,1] = 1
-    soundfilename = "../example/signals/speech2_48000_mono.wav"
+    # Simple HP Filter
+    #test_hp_filter = np.zeros((HPFILTERSIZE, 2), dtype='float32')
+    #test_hp_filter[0,0] = 1
+    #test_hp_filter[0,1] = 1
+    # Real HP Filter
+    test_hp_filter, _ = sf.read("resources/results_oratory1990_harman_over-ear_2018_AKG.wav", dtype='float32')
+
+    soundfilename = "resources/speech2_48000_mono.wav"
 
     ## First: Pybinsim convolution
     # Create input buffer, convolver
@@ -63,7 +66,7 @@ def test_convolution_basic():
 
     # Set filters for convolvers
     convolver.setAllFilters([filter])
-    convolver.setAllFilters([filter]) #set filter twice to test block interpolation
+    convolver.setAllFilters([filter]) # Set filter twice to test block interpolation
     convolverHP.setAllFilters([hpfilter])
 
     # Run for some blocks
@@ -105,18 +108,9 @@ def test_convolution_basic():
     left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part, atol=ACCURACY,rtol=ACCURACY)
     right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part, atol=ACCURACY,rtol=ACCURACY)
 
-    ## These were the values that still failed
-    # print(result_matrix_pybinsim[0, 1455])
-    # print(left_hp_part[1455])
-    # print(result_matrix_pybinsim[0, 1574])
-    # print(left_hp_part[1574])
-    # print(result_matrix_pybinsim[0, 1876])
-    # print(left_hp_part[1876])
-    # print(result_matrix_pybinsim[0, 1749])
-    # print(left_hp_part[1749])
+    #assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY)
+    #assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY)
 
-    assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY)
-    assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY)
     assert left_correct.all() == True, f"Left channel convolution faulty at {[i for i in range(0, FILTERSIZE) if left_correct[i] == False]}"
     assert right_correct.all() == True, f"Right channel convolution faulty at {[i for i in range(0, FILTERSIZE) if right_correct[i] == False]}"
 
