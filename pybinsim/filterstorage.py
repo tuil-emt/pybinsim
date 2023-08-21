@@ -51,8 +51,15 @@ class Filter(object):
 
         # input shape: (ir_length, 2)
         ir_blocked = np.empty((2, irBlocks, block_size))
-        ir_blocked[0,] = np.reshape(inputfilter[:,0], (irBlocks, block_size))
-        ir_blocked[1,] = np.reshape(inputfilter[:,1], (irBlocks, block_size))
+
+        # if filter is mono - for whatever reason - use mono channel on both ir blocks
+        if inputfilter.shape[1] != 2:
+            ir_blocked[0,] = np.reshape(inputfilter[:,0], (irBlocks, block_size))
+            ir_blocked[1,] = np.reshape(inputfilter[:,0], (irBlocks, block_size))
+        else:
+            ir_blocked[0,] = np.reshape(inputfilter[:,0], (irBlocks, block_size))
+            ir_blocked[1,] = np.reshape(inputfilter[:,1], (irBlocks, block_size))
+        
         self.IR_blocked = torch.as_tensor(ir_blocked, dtype=torch.float32, device=self.torch_device)
 
         # not used
@@ -121,8 +128,7 @@ class FilterStorage(object):
         self.default_ds_filter = Filter(np.zeros((self.ds_size, 2), dtype='float32'), self.ds_blocks, self.block_size, torch_settings)
         self.default_early_filter = Filter(np.zeros((self.early_size, 2), dtype='float32'), self.early_blocks, self.block_size, torch_settings)
         self.default_late_filter = Filter(np.zeros((self.late_size, 2), dtype='float32'), self.late_blocks, self.block_size, torch_settings)
-        self.default_sd_filter = Filter(np.zeros((self.sd_size, 2), dtype='float32'), self.sd_blocks,
-                                          self.block_size, torch_settings)
+        self.default_sd_filter = Filter(np.zeros((self.sd_size, 2), dtype='float32'), self.sd_blocks, self.block_size, torch_settings)
 
         self.default_ds_filter.storeInFDomain()
         self.default_early_filter.storeInFDomain()
@@ -192,8 +198,7 @@ class FilterStorage(object):
                     filter_pose = SourcePose.from_filterValueList(filter_value_list)
 
                     current_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
-                                            self.sd_blocks, self.block_size,
-                                            self.torch_settings)
+                                            self.sd_blocks, self.block_size, self.torch_settings)
 
                     current_filter.storeInFDomain()
 
@@ -296,7 +301,26 @@ class FilterStorage(object):
                     #self.headphone_filter = Filter(self.load_wav_filter(filter_path), self.ir_blocks, self.block_size)
                     self.log.info("Skipping headphone filter: {}".format(filter_path))
                     continue
-                
+            
+            if line.startswith('SD'):
+                # TODO: Should SD filters also be skipped if not used (analogue to HP filters)?
+                filter_type = FilterType.directivity_Filter
+                filter_value_list = np.concatenate([self.matfile[self.matvarname]['sourceOrientation'][0][row],
+                                    self.matfile[self.matvarname]['sourcePosition'][0][row],
+                                    self.matfile[self.matvarname]['custom'][0][row]], axis=1)
+
+                filter_pose = SourcePose.from_filterValueList(filter_value_list)
+
+                current_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
+                                        self.sd_blocks, self.block_size, self.torch_settings)
+
+                current_filter.storeInFDomain()
+
+                # create key and store in dict
+                key = filter_pose.create_key()
+                self.sd_filter_dict.update({key: current_filter})
+                continue
+
             filter_type = FilterType.Undefined
             
             if line.startswith('DS'):

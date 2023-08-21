@@ -147,19 +147,20 @@ Lines with the prefix DS, ER and LR contain a 'filter key' which consist of 9 or
 For 9 digit keys:
 
 ::
-Value 1-3 : listener orientation [yaw, pitch, roll]
-Value 4-6 : listener position [x, y, z]
-Value 7-9 : custom values [a, b, c]
+
+    Value 1-3 : listener orientation [yaw, pitch, roll]
+    Value 4-6 : listener position [x, y, z]
+    Value 7-9 : custom values [a, b, c]
 
 For 15 digit keys:
 
 ::
 
-Value 1-3 : listener orientation [yaw, pitch, roll]
-Value 4-6 : listener position [x, y, z]
-Value 7-9 : source orientation [yaw, pitch, roll]
-Value 10-12 : source position [x, y, z]
-Value 13-15 : custom values [a, b, c]
+    Value 1-3 : listener orientation [yaw, pitch, roll]
+    Value 4-6 : listener position [x, y, z]
+    Value 7-9 : source orientation [yaw, pitch, roll]
+    Value 10-12 : source position [x, y, z]
+    Value 13-15 : custom values [a, b, c]
 
 
 The filter behind the prefix HP will be loaded and applied automatically when useHeadphoneFilter == True.
@@ -172,13 +173,13 @@ A mat file should contain one ore more variables containing your filters. The ma
 
 ::
 
-"type" ['DS','ER','LR','HP]
-"ListenerOrientation" [array(int, int ,int)]
-"ListenerPosition" [array(int, int ,int)]
-"SourceOrientation" [array(int, int ,int)]
-"SourcePosition" [array(int, int ,int)]
-"custom" [array(int, int ,int)]
-"filter" [array(single,2), array(double,2)]
+    "type" ['DS','ER','LR','HP]
+    "ListenerOrientation" [array(int, int ,int)]
+    "ListenerPosition" [array(int, int ,int)]
+    "SourceOrientation" [array(int, int ,int)]
+    "SourcePosition" [array(int, int ,int)]
+    "custom" [array(int, int ,int)]
+    "filter" [array(single,2), array(double,2)]
 
 For headhpone filters, only the field filter is relevant. To reduce memory usage we advise to use single precision for the filters. To speedup the filter loading we advice to store the mat files on a SSD and to save the mat files without compression (which is not the default setting in MATLAB). Also take a look at the example_mat.mat file to understand the structure. 
 

@@ -64,9 +64,10 @@ class BinSimConfig(object):
                                   'pauseAudioPlayback': False,
                                   'torchConvolution[cpu/cuda]': 'cuda',
                                   'torchStorage[cpu/cuda]': 'cuda',
-                                  'ds_convolverActive': False,
+                                  'ds_convolverActive': True,
                                   'early_convolverActive': True,
                                   'late_convolverActive': True,
+                                  'sd_convolverActive': False,
                                   'audio_callback_benchmark': False, # only set for bench_audio_callback.py!
         }
 
@@ -133,8 +134,9 @@ class BinSim(object):
         self.stream = None
 
         #self.convolverWorkers = []
-        self.convolverHP, self.ds_convolver, self.early_convolver, self.late_convolver, self.input_Buffer,\
-        self.input_BufferHP, self.filterStorage,  self.oscReceiver, self.soundHandler = self.initialize_pybinsim()
+        self.convolverHP, self.ds_convolver, self.early_convolver, self.late_convolver, self.sd_convolver,\
+            self.input_Buffer, self.input_BufferHP, self.input_BufferSD, self.filterStorage,  self.oscReceiver,\
+            self.soundHandler = self.initialize_pybinsim()
 
     def __enter__(self):
         return self
@@ -219,6 +221,7 @@ class BinSim(object):
         # Create input buffers
         input_Buffer = InputBufferMulti(self.blockSize,  self.nChannels, self.config.get('torchConvolution[cpu/cuda]'))
         input_BufferHP = InputBufferMulti(self.blockSize,  2, self.config.get('torchConvolution[cpu/cuda]'))
+        input_BufferSD = InputBufferMulti(self.blockSize,  2, self.config.get('torchConvolution[cpu/cuda]'))
 
 
         # Create N convolvers depending on the number of wav channels
@@ -233,10 +236,14 @@ class BinSim(object):
         late_convolver = ConvolverTorch(late_size, self.blockSize, False, self.nChannels,
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
+        sd_convolver = ConvolverTorch(sd_size, self.blockSize, False, self.nChannels,
+                                          self.config.get('enableCrossfading'),
+                                          self.config.get('torchConvolution[cpu/cuda]'))
 
         ds_convolver.active = self.config.get('ds_convolverActive')
         early_convolver.active = self.config.get('early_convolverActive')
         late_convolver.active = self.config.get('late_convolverActive')
+        sd_convolver.active = self.config.get('sd_convolverActive')
 
         # HP Equalization convolver
         convolverHP = None
@@ -247,8 +254,8 @@ class BinSim(object):
             hpfilter = filterStorage.get_headphone_filter()
             convolverHP.setAllFilters([hpfilter])
 
-        return convolverHP, ds_convolver, early_convolver, late_convolver, input_Buffer, input_BufferHP, \
-               filterStorage, oscReceiver, soundHandler
+        return convolverHP, ds_convolver, early_convolver, late_convolver, sd_convolver, input_Buffer, \
+               input_BufferHP, input_BufferSD, filterStorage, oscReceiver, soundHandler
 
     def __cleanup(self):
         # Close everything when BinSim is finished
@@ -329,8 +336,24 @@ def audio_callback(binsim):
                         filterList.append(filter)
                     binsim.late_convolver.setAllFilters(filterList)
                     break 
-
+           
             ds = binsim.ds_convolver.process(input_buffers)
+            
+            for n in range(amount_channels):
+                if binsim.oscReceiver.is_sd_fitler_update_necessary(n):
+                    sd_filterList = list()
+                    for sourceId in range(amount_channels):
+                        filterValueList = binsim.oscReceiver.get_current_sd_filter_values(sourceId)
+                        sd_filter = binsim.filterStorage.get_sd_filter(Pose.from_filterValueList(filterValueList))
+                        sd_filterList.append(sd_filter)
+                    binsim.sd_convolver.setAllFilters(sd_filterList)
+                    break
+            
+            # apply source directivity to ds block if needed
+            if callback.config.get('sd_convolverActive'):
+                sd_buffer = binsim.input_Buffer.process(ds)
+                ds = binsim.sd_convolver.process(sd_buffer) # let's keep the name "ds" for now
+                 
             early = binsim.early_convolver.process(input_buffers)
             late = binsim.late_convolver.process(input_buffers)
 
@@ -338,7 +361,7 @@ def audio_callback(binsim):
             ds.add_(early).add_(late)
             binsim.result = ds[:,0,:]
 
-          # Finally apply Headphone Filter
+            # Finally apply Headphone Filter
             if callback.config.get('useHeadphoneFilter'):
                 result_buffer = binsim.input_BufferHP.process(binsim.result)
                 binsim.result = binsim.convolverHP.process(result_buffer)[:,0,:]

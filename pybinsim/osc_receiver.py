@@ -416,6 +416,9 @@ class OscReceiver(object):
     def is_late_filter_update_necessary(self, channel):
         """ Check if there is a new late reverb filter for channel """
         return self.late_filters_updated[channel]
+    
+    def is_sd_fitler_update_necessary(self, channel):
+        return self.sd_filters_updated[channel]
 
     #def get_current_values(self, channel):
     #    """ Return key for filter """
@@ -437,6 +440,11 @@ class OscReceiver(object):
         self.late_filters_updated[channel] = False
         return self.valueList_late_filter[channel, :]
     
+    def get_current_sd_filter_values(self, channel):
+        """ Return key for source directivity filters """
+        self.sd_filters_updated[channel] = False
+        return self.valueList_sd_filter[channel, :]
+
     def get_current_config(self):
         return self.currentConfig
 
