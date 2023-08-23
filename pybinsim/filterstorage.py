@@ -182,7 +182,11 @@ class FilterStorage(object):
                 #print(row)
                 # Parse headphone filter
                 if self.matfile[self.matvarname]['type'][0][row] == 'HP':
+                    if not self.useHeadphoneFilter:
+                        continue
+
                     filter_type = FilterType.headphone_Filter
+
                     self.headphone_filter = Filter(self.check_filter(filter_type, self.matfile[self.matvarname]['filter'][0][row]),
                                                    self.headphone_ir_blocks, self.block_size, self.torch_settings)
                     self.headphone_filter.storeInFDomain()
@@ -547,14 +551,22 @@ class FilterStorage(object):
                 self.log.info('Late Filter too short: zero padding')
                 current_filter = np.concatenate((current_filter, np.zeros(
                     (self.late_size - filter_size[0], 2), np.float32)), 0)
-        elif (filter_type == FilterType.headphone_Filter):
-            if filter_size[0] > self.late_size:
+        elif (filter_type == FilterType.directivity_Filter):
+            if filter_size[0] > self.sd_size:
+                self.log.warning('Source Directivity Filter too long: shorten')
+                current_filter = current_filter[:self.sd_size]
+            elif filter_size[0] < self.sd_size:
+                # self.log.info('Source Directivity Filter too short: zero padding')
+                current_filter = np.concatenate((current_filter, np.zeros(
+                    (self.sd_size - filter_size[0], 2), np.float32)), 0)
+        elif (filter_type == FilterType.headphone_Filter) and self.useHeadphoneFilter:
+            if filter_size[0] > self.headPhoneFilterSize:
                 self.log.warning('Headphone Filter too long: shorten')
-                current_filter = current_filter[:self.late_size]
-        elif filter_size[0] < self.late_size:
+                current_filter = current_filter[:self.headPhoneFilterSize]
+            elif filter_size[0] < self.headPhoneFilterSize:
                 self.log.info('Headphone Filter too short: zero padding')
                 current_filter = np.concatenate((current_filter, np.zeros(
-                    (self.late_size - filter_size[0], 2), np.float32)), 0)
+                    (self.headPhoneFilterSize - filter_size[0], 2), np.float32)), 0)
 
         return current_filter
 

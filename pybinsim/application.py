@@ -351,7 +351,7 @@ def audio_callback(binsim):
             
             # apply source directivity to ds block if needed
             if callback.config.get('sd_convolverActive'):
-                sd_buffer = binsim.input_Buffer.process(ds)
+                sd_buffer = binsim.input_Buffer.process(ds[:,0,:])
                 ds = binsim.sd_convolver.process(sd_buffer) # let's keep the name "ds" for now
                  
             early = binsim.early_convolver.process(input_buffers)
