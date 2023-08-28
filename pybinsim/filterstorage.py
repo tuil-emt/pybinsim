@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 import logging
-import multiprocessing as mp
 import enum
 from pathlib import Path
 
