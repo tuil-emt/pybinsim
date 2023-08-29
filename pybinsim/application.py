@@ -32,7 +32,7 @@ from pybinsim.convolver import ConvolverTorch
 from pybinsim.filterstorage import FilterStorage
 from pybinsim.osc_receiver import CONFIG_SOUNDFILE_PLAYER_NAME, OscReceiver
 from pybinsim.parsing import parse_boolean, parse_soundfile_list
-from pybinsim.pose import Pose
+from pybinsim.pose import Pose, SourcePose
 from pybinsim.soundhandler import SoundHandler, LoopState
 from pybinsim.input_buffer import InputBufferMulti
 
@@ -344,7 +344,7 @@ def audio_callback(binsim):
                     sd_filterList = list()
                     for sourceId in range(amount_channels):
                         filterValueList = binsim.oscReceiver.get_current_sd_filter_values(sourceId)
-                        sd_filter = binsim.filterStorage.get_sd_filter(Pose.from_filterValueList(filterValueList))
+                        sd_filter = binsim.filterStorage.get_sd_filter(SourcePose.from_filterValueList(filterValueList))
                         sd_filterList.append(sd_filter)
                     binsim.sd_convolver.setAllFilters(sd_filterList)
                     break
