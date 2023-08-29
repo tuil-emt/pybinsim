@@ -34,7 +34,7 @@ class ConvolverTorch(object):
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size: int, block_size: int, headphoneEQ: bool, sources: int, interpolate: bool, torch_settings: str):
+    def __init__(self, ir_size: int, block_size: int, stereoInput: bool, sources: int, interpolate: bool, torch_settings: str):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.ConvolverTorch")
@@ -48,9 +48,9 @@ class ConvolverTorch(object):
         self.block_size = block_size
         self.sources = sources
 
-        self.headphoneEQ = headphoneEQ
-        if self.headphoneEQ:
-            self.log.info("Convolver used for Headphone EQ")
+        self.stereoInput = stereoInput
+        if self.stereoInput:
+            self.log.info("Convolver used for stereo input")
             self.sources = 1
 
         # floor (integer) division in python 2 & 3
@@ -138,7 +138,7 @@ class ConvolverTorch(object):
         self.frequency_domain_input = torch.roll(self.frequency_domain_input, self.sources, dims=1)
 
         # copy input buffers to frequency_domain_inputs
-        if self.headphoneEQ:
+        if self.stereoInput:
             self.frequency_domain_input[0, :self.sources, :] = input_buffer[0,:]
             self.frequency_domain_input[1, :self.sources, :] = input_buffer[1,:]
         else:

@@ -236,7 +236,7 @@ class BinSim(object):
         late_convolver = ConvolverTorch(late_size, self.blockSize, False, self.nChannels,
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
-        sd_convolver = ConvolverTorch(sd_size, self.blockSize, False, self.nChannels,
+        sd_convolver = ConvolverTorch(sd_size, self.blockSize, True, self.nChannels,
                                           self.config.get('enableCrossfading'),
                                           self.config.get('torchConvolution[cpu/cuda]'))
 
