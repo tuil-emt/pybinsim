@@ -40,8 +40,8 @@ class OscReceiver(PkgReceiver):
     To start the servers on daemon threads, call the method `start_listening`. 
     """
 
-    def __init__(self,current_config, soundhandler: SoundHandler):
-        super().__init__(current_config, SoundHandler)
+    def __init__(self, current_config, soundhandler: SoundHandler):
+        super().__init__(current_config, soundhandler)
         self.log.info("oscReceiver: init")
 
         self.port1 = self.port

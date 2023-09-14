@@ -4,14 +4,16 @@ import numpy as np
 import zmq
 from pybinsim.pkg_receiver import PkgReceiver
 
+from pybinsim.soundhandler import PlayState, SoundHandler, LoopState
+
 
 class ZmqReceiver(PkgReceiver):
     """
     Class for receiving ZMQ messages to control pyBinSim
     """
 
-    def __init__(self, current_config):
-        super().__init__(current_config)
+    def __init__(self, current_config, soundhandler: SoundHandler):
+        super().__init__(current_config, soundhandler)
         #self.log = logging.getLogger("pybinsim.ZmqReceiver")
         self.log.info("zmqReceiver: init")
 
@@ -144,12 +146,11 @@ class ZmqReceiver(PkgReceiver):
                     # self.log.info(msg)
                 except zmq.ZMQError:
                     # TODO: error handling if necessary
-                    print('meh')
                     pass
-            pass
-
+        
         zmq_socket.close()
         zmq_context.term()
+        return
 
     def handle_multi_command(self, identifier, commands, *args):
         """
@@ -176,4 +177,4 @@ class ZmqReceiver(PkgReceiver):
         """
         self.log.info('ZmqReceiver: close()')
         self.run_thread = False
-        self.zmq_thread.join()
+        self.zmq_thread.join(timeout=3)
