@@ -123,6 +123,12 @@ class OscReceiver(PkgReceiver):
         osc_thread3.daemon = True
         osc_thread3.start()
 
+        self.log.info("Serving on {}".format(self.server4.server_address))
+
+        osc_thread4 = threading.Thread(target=self.server4.serve_forever)
+        osc_thread4.daemon = True
+        osc_thread4.start()
+
     def close(self):
         """
         Close the osc receiver

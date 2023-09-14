@@ -34,7 +34,7 @@ class ConvolverTorch(object):
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size: int, block_size: int, headphoneEQ: bool, sources: int, interpolate: bool, torch_settings: str):
+    def __init__(self, ir_size: int, block_size: int, stereoInput: bool, sources: int, interpolate: bool, torch_settings: str):
         start = default_timer()
 
         self.log = logging.getLogger("pybinsim.ConvolverTorch")
@@ -48,10 +48,10 @@ class ConvolverTorch(object):
         self.block_size = block_size
         self.sources = sources
 
-        self.headphoneEQ = headphoneEQ
-        if self.headphoneEQ:
-            self.log.info("Convolver used for Headphone EQ")
-            self.sources = 2
+        self.stereoInput = stereoInput
+        if self.stereoInput:
+            self.log.info("Convolver used for stereo input")
+            self.sources = 1
 
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
@@ -63,23 +63,23 @@ class ConvolverTorch(object):
         self.crossFadeOut = torch.as_tensor(crossFadeOut, dtype=torch.float32, device=self.torch_device)
 
         # Filter format: [2, nBlocks*sources, blockSize+1] (2 for left, right)
-        self.filters_blocked = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.filters_blocked = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
         
-        self.filters_cpu = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.filters_cpu = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
                                            device="cpu")
         if self.torch_device.type == "cuda":
             self.filters_cpu = self.filters_cpu.pin_memory()
 
-        self.complex_buffer = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.complex_buffer = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
 
-        self.previous_filters_blocked = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.previous_filters_blocked = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
                                            device=self.torch_device)
 
         self.temp = self.previous_filters_blocked
 
-        self.frequency_domain_input = torch.zeros(2, self.IR_blocks*sources, self.block_size + 1, dtype=torch.complex64,
+        self.frequency_domain_input = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
                                device=self.torch_device)
 
         # Arrays for the result of the complex multiply and add
@@ -138,8 +138,9 @@ class ConvolverTorch(object):
         self.frequency_domain_input = torch.roll(self.frequency_domain_input, self.sources, dims=1)
 
         # copy input buffers to frequency_domain_inputs
-        if self.headphoneEQ:
-            self.frequency_domain_input[:, :self.sources, :] = input_buffer
+        if self.stereoInput:
+            self.frequency_domain_input[0, :self.sources, :] = input_buffer[0,:]
+            self.frequency_domain_input[1, :self.sources, :] = input_buffer[1,:]
         else:
             self.frequency_domain_input[0, :self.sources, :] = input_buffer
             self.frequency_domain_input[1, :self.sources, :] = input_buffer

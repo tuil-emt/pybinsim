@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 import logging
-import multiprocessing
 import pickle
 from pathlib import Path
 from timeit import default_timer
