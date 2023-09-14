@@ -95,7 +95,7 @@ class BinSimConfig(object):
 
                     if boolean_config is None:
                         self.log.warning(
-                            "Cannot convert {} to bool. (key: {}".format(value, key))
+                            "Cannot convert {} to bool. (key: {})".format(value, key))
 
                     self.configurationDict[key] = boolean_config
                 else:

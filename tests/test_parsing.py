@@ -4,8 +4,8 @@ from pybinsim.parsing import parse_boolean, parse_soundfile_list
 
 
 def test_parse_boolean_regular():
-    inputs = [True, False, "True", "False", None, "Something Strange", 12]
-    expected_outputs = [True, False, True, False, None, None, None]
+    inputs = [True, False, "True", "FALSE", None, "Something Strange", 12, 0]
+    expected_outputs = [True, False, True, False, None, None, True, False]
 
     for i, test_value in enumerate(inputs):
         output = parse_boolean(test_value)
