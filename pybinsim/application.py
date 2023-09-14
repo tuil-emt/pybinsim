@@ -71,7 +71,7 @@ class BinSimConfig(object):
                                   'late_convolverActive': True,
                                   'sd_convolverActive': False,
                                   'audio_callback_benchmark': False, # only set for bench_audio_callback.py!
-                                  'recv_type': 'zmq',
+                                  'recv_type': 'osc',
                                   'recv_protocol': 'tcp',
                                   'recv_ip': '127.0.0.1',
                                   'recv_port': 10000, # starting port in case of OSC
