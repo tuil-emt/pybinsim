@@ -6,8 +6,9 @@ from pybinsim.parsing import parse_soundfile_list
 
 import numpy as np
 import torch
-from pytest import approx
+import pytest
 import soundfile as sf
+#from pathlib import Path
 
 
 BLOCKSIZE = 512
@@ -21,6 +22,10 @@ CHANNELS = 1
 SAMPLINGRATE = 48000
 
 ACCURACY = 1./(2**16)
+
+@pytest.fixture(autouse=True)
+def change_test_dir(request, monkeypatch):
+    monkeypatch.chdir(request.fspath.dirname)
 
 
 def test_convolution_basic():
@@ -108,8 +113,8 @@ def test_convolution_basic():
     left_correct = np.isclose(result_matrix_pybinsim[0, :], left_hp_part, atol=ACCURACY,rtol=ACCURACY)
     right_correct = np.isclose(result_matrix_pybinsim[1, :], right_hp_part, atol=ACCURACY,rtol=ACCURACY)
 
-    #assert left_hp_part == approx(result_matrix_pybinsim[0, :], abs=ACCURACY)
-    #assert right_hp_part == approx(result_matrix_pybinsim[1, :], abs=ACCURACY)
+    #assert left_hp_part == pytest.approx(result_matrix_pybinsim[0, :], abs=ACCURACY)
+    #assert right_hp_part == pytest.approx(result_matrix_pybinsim[1, :], abs=ACCURACY)
 
     assert left_correct.all() == True, f"Left channel convolution faulty at {[i for i in range(0, FILTERSIZE) if left_correct[i] == False]}"
     assert right_correct.all() == True, f"Right channel convolution faulty at {[i for i in range(0, FILTERSIZE) if right_correct[i] == False]}"
