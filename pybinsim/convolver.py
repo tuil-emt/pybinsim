@@ -21,147 +21,82 @@
 # SOFTWARE.
 
 import logging
-import multiprocessing
-import pickle
-from pathlib import Path
 from timeit import default_timer
+from typing import List
+import math
+import torch
 
-import numpy as np
-import pyfftw
+from pybinsim.filterstorage import Filter
 
-
-nThreads = multiprocessing.cpu_count()
-
-
-class ConvolverFFTW(object):
+class ConvolverTorch(object):
     """
     Class for convolving mono (usually for virtual sources) or stereo input (usually for HP compensation)
     with a BRIRsor HRTF
     """
 
-    def __init__(self, ir_size, block_size, process_stereo, useSplittedFilters = False, lateReverbSize = 0):
+    def __init__(self, ir_size: int, block_size: int, stereoInput: bool, sources: int, interpolate: bool, torch_settings: str):
         start = default_timer()
 
-        self.log = logging.getLogger("pybinsim.ConvolverFFTW")
+        self.log = logging.getLogger("pybinsim.ConvolverTorch")
         self.log.info("Convolver: Start Init")
 
-        # pyFFTW Options
-        pyfftw.interfaces.cache.enable()
-        # self.fftw_planning_effort = 'FFTW_MEASURE'
-        # self.fftw_planning_effort = 'FFTW_PATIENT'
-        self.fftw_planning_effort = 'FFTW_ESTIMATE'
-        # self.fftw_planning_effort ='FFTW_EXHAUSTIVE' # takes 5..10 minutes
+        # Torch options
+        self.torch_device = torch.device(torch_settings)
 
         # Get Basic infos
         self.IR_size = ir_size
         self.block_size = block_size
-        self.reverbSize = lateReverbSize
-        self.late_IR_blocks = 0
-        
-        self.useSplittedFilters = useSplittedFilters
-        
-        if self.useSplittedFilters:
-            # Needed for concatenating filters
-            self.late_IR_blocks = self.reverbSize // block_size
-            # Size used for convolution changes
-            self.IR_size += self.reverbSize
+        self.sources = sources
 
+        self.stereoInput = stereoInput
+        if self.stereoInput:
+            self.log.info("Convolver used for stereo input")
+            self.sources = 1
 
         # floor (integer) division in python 2 & 3
         self.IR_blocks = self.IR_size // block_size
 
-        self.late_early_transition = self.IR_blocks - self.late_IR_blocks
+        block_time_in_samples = torch.arange(0, self.block_size, dtype=torch.float32)
+        crossFadeOut = torch.square(torch.cos(block_time_in_samples/(self.block_size-1)*(torch.tensor(math.pi)/2)))
+        crossFadeIn = torch.flipud(crossFadeOut)
+        self.crossFadeIn = torch.as_tensor(crossFadeIn, dtype=torch.float32, device=self.torch_device)
+        self.crossFadeOut = torch.as_tensor(crossFadeOut, dtype=torch.float32, device=self.torch_device)
 
-        # Calculate LINEAR crossfade windows
-        #self.crossFadeIn = np.array(range(0, self.block_size), dtype='float32')
-        #self.crossFadeIn *= 1 / float((self.block_size - 1))
-        #self.crossFadeOut = np.flipud(self.crossFadeIn)
-
-
-        # Calculate time domain COSINE-Square crossfade windows
-        self.crossFadeOut = np.array(range(0, self.block_size), dtype='float32')
-        self.crossFadeOut = np.square(
-            np.cos(self.crossFadeOut/(self.block_size-1)*(np.pi/2)))
-        self.crossFadeIn = np.flipud(self.crossFadeOut)
-
-        # Filter format: [nBlocks,blockSize*2]
-
-        pn_temporary = Path(__file__).parent.parent / "tmp"
-        fn_wisdom = pn_temporary / "fftw_wisdom.pickle"
-        if pn_temporary.exists() and fn_wisdom.exists():
-            loaded_wisdom = pickle.load(open(fn_wisdom, 'rb'))
-            pyfftw.import_wisdom(loaded_wisdom)
-
-        # Create Input Buffers and create fftw plans. These need to be memory aligned, because they are transformed to
-        # freq domain regularly
-        self.log.info("Convolver: Start Init buffer fft plans")
-        self.buffer = pyfftw.zeros_aligned(self.block_size * 2, dtype='float32')
-        self.bufferFftPlan = pyfftw.builders.rfft(self.buffer, overwrite_input=True, threads=nThreads,
-                                                  planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        self.buffer2 = pyfftw.zeros_aligned(
-            self.block_size * 2, dtype='float32')
-        self.buffer2FftPlan = pyfftw.builders.rfft(self.buffer2, overwrite_input=True, threads=nThreads,
-                                                   planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        # Create arrays for the filters and the FDLs.
-        self.log.info("Convolver: Start Init filter fft plans")
+        # Filter format: [2, nBlocks*sources, blockSize+1] (2 for left, right)
+        self.filters_blocked = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
+                                           device=self.torch_device)
         
-        self.TF_late_left_blocked = np.zeros((self.late_IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_late_right_blocked = np.zeros((self.late_IR_blocks, self.block_size + 1), dtype='complex64')
-        
-        self.TF_left_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_right_blocked = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_left_blocked_previous = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.TF_right_blocked_previous = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.filters_cpu = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
+                                           device="cpu")
+        if self.torch_device.type == "cuda":
+            self.filters_cpu = self.filters_cpu.pin_memory()
 
-        self.FDL_left = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
-        self.FDL_right = np.zeros((self.IR_blocks, self.block_size + 1), dtype='complex64')
+        self.complex_buffer = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
+                                           device=self.torch_device)
+
+        self.previous_filters_blocked = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
+                                           device=self.torch_device)
+
+        self.temp = self.previous_filters_blocked
+
+        self.frequency_domain_input = torch.zeros(2, self.IR_blocks*self.sources, self.block_size + 1, dtype=torch.complex64,
+                               device=self.torch_device)
 
         # Arrays for the result of the complex multiply and add
-        # These should be memory aligned because ifft is performed with these data
-        self.resultLeftFreq = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
-        self.resultRightFreq = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
-        self.resultLeftFreqPrevious = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
-        self.resultRightFreqPrevious = pyfftw.zeros_aligned(self.block_size + 1, dtype='complex64')
-
-        self.log.info("Convolver: Start Init result ifft plans")
-        self.resultLeftIFFTPlan = pyfftw.builders.irfft(self.resultLeftFreq,
-                                                        overwrite_input=True, threads=nThreads,
-                                                        planner_effort=self.fftw_planning_effort, avoid_copy=True)
-        self.resultRightIFFTPlan = pyfftw.builders.irfft(self.resultRightFreq,
-                                                         overwrite_input=True, threads=nThreads,
-                                                         planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        self.log.info("Convolver: Start Init result prvieous fft plans")
-        self.resultLeftPreviousIFFTPlan = pyfftw.builders.irfft(self.resultLeftFreqPrevious,
-                                                                overwrite_input=True, threads=nThreads,
-                                                                planner_effort=self.fftw_planning_effort, avoid_copy=True)
-        self.resultRightPreviousIFFTPlan = pyfftw.builders.irfft(self.resultRightFreqPrevious,
-                                                                 overwrite_input=True, threads=nThreads,
-                                                                 planner_effort=self.fftw_planning_effort, avoid_copy=True)
-
-        # save FFTW plans to recover for next pyBinSim session
-        collected_wisdom = pyfftw.export_wisdom()
-        if not pn_temporary.exists():
-            pn_temporary.mkdir(parents=True)
-        pickle.dump(collected_wisdom, open(fn_wisdom, "wb"))
+        self.resultFreq = torch.zeros(2, 1, self.block_size + 1, dtype=torch.complex64, device=self.torch_device)
 
         # Result of the ifft is stored here
-        self.outputLeft = np.zeros(self.block_size, dtype='float32')
-        self.outputRight = np.zeros(self.block_size, dtype='float32')
+        self.outputEmpty = torch.zeros(2, 1, self.block_size, dtype=torch.float32, device=self.torch_device)
+
+        self.irfft_buffer1 = torch.zeros(2, 1, self.block_size*2, dtype=torch.float32, device=self.torch_device)
+        self.irfft_buffer2 = torch.zeros(2, 1, self.block_size*2, dtype=torch.float32, device=self.torch_device)
 
         # Counts how often process() is called
         self.processCounter = 0
 
-        # Flag for interpolation of output blocks (result of process())
-        self.interpolate = False
-        
-        # Flag which initiates filter rebuild (combining early and late part)
-        self.buildNewFilter = False
+        self.active = True
 
-        # Select mono or stereo processing
-        self.processStereo = process_stereo
+        self.interpolate = interpolate
 
         end = default_timer()
         delta = end - start
@@ -173,209 +108,65 @@ class ConvolverFFTW(object):
         :return: processing counter
         """
         return self.processCounter
-    """
-    def transform_filter(self, filter):
-        ""
-        Transform filter to freq domain
 
-        :param filter:
-        :return: transformed filter
-        ""
+    def setAllFilters(self, filters: List[Filter]):
+        self.saveOldFilters()
+        # start copy on GPU
+        # ready temp with current values and make current, previous will just keep the current values
+        self.temp.copy_(self.filters_blocked, non_blocking=True)
 
-        # Get blocked IRs
-        IR_left_blocked, IR_right_blocked = filter.getFilter()
+        # swap previous and current
+        self.filters_blocked = self.temp
+        # make sure previous is still kept in temp, so we can later reassign previous
+        self.temp = self.previous_filters_blocked
 
-        self.TF_left_blocked = np.zeros(
-            [self.IR_blocks, self.block_size + 1], dtype='complex64')
-        self.TF_right_blocked = np.zeros(
-            [self.IR_blocks, self.block_size + 1], dtype='complex64')
+        # assemble new filter Tensors on CPU in pinned memory
+        for i in range(self.sources):
+            self.filters_cpu[:, i::self.sources, :] = filters[i].getFilterFD()
 
-        for ir_block_count in range(0, self.IR_blocks):
-            self.TF_left_blocked[ir_block_count] = self.filter_fftw_plan(
-                IR_left_blocked[ir_block_count])
-            self.TF_right_blocked[ir_block_count] = self.filter_fftw_plan(
-                IR_right_blocked[ir_block_count])
-     """
+        # write new filters to GPU
+        self.filters_blocked.copy_(self.filters_cpu, non_blocking=True)
 
-    def buildFilters(self):
-        """
-        Build filter from early and late part
-
-        :return: combined filter
-        """
-
-        # Attach late part; Filter will be shorter by one block afterwards
-        if self.useSplittedFilters and self.buildNewFilter:
-            # Overlap last block of early filters with first block of late reverb
-            self.TF_left_blocked[self.late_early_transition-1, :] = np.add(self.TF_left_blocked[self.late_early_transition-1, :], self.TF_late_left_blocked[0, :])
-            self.TF_right_blocked[self.late_early_transition-1, :] = np.add(self.TF_right_blocked[self.late_early_transition-1, :], self.TF_late_right_blocked[0, :])
-            
-            # Add all other late filter blocks
-            self.TF_left_blocked[self.late_early_transition:-1, :] = self.TF_late_left_blocked[1:, :]
-            self.TF_right_blocked[self.late_early_transition:-1, :] = self.TF_late_right_blocked[1:, :]
-
-            self.buildNewFilter = False
-
-    def setIR(self, filter, do_interpolation):
-        """
-        Hand over a new set of filters to the convolver
-        and define if you want to perform an interpolation/crossfade
-
-        :param filter:
-        :param do_interpolation:
-        :return: None
-        """
-
-        left, right = filter.getFilterFD()
-        self.TF_left_blocked[0:self.late_early_transition, :] = left
-        self.TF_right_blocked[0:self.late_early_transition, :] = right
-
-        # Interpolation means cross fading the output blocks (linear interpolation)
-        self.interpolate = do_interpolation
-
-        # apply new filters
-        self.buildNewFilter = True
-    
-    def setLateReverb(self, filter, do_interpolation):
-        """
-        Hand over latereverb filter to the convolver
-
-        :param filter:
-        :return: None
-        """
-        left, right = filter.getFilterFD()
-        self.TF_late_left_blocked[0:self.late_IR_blocks, :] = left
-        self.TF_late_right_blocked[0:self.late_IR_blocks, :] = right
-
-        # Interpolation means cross fading the output blocks (linear interpolation)
-        self.interpolate = do_interpolation
-
-        self.buildNewFilter = True
-    
     def saveOldFilters(self):
-        # Save old filters in case interpolation is needed
-        self.TF_left_blocked_previous[:] = self.TF_left_blocked
-        self.TF_right_blocked_previous[:] = self.TF_right_blocked
+        self.previous_filters_blocked = self.filters_blocked
 
-    def process_nothing(self):
-        """
-        Just for testing
-        :return: None
-        """
-        self.processCounter += 1
+    def process(self, input_buffer):
+        if not self.active:
+            return self.outputEmpty
 
-    def fill_buffer_mono(self, block):
-        """
-        Copy mono soundblock to input Buffer;
-        Transform to Freq. Domain and store result in FDLs
-        :param block: Mono sound block
-        :return: None
-        """
+        # shift frequency_domain_inputs
+        self.frequency_domain_input = torch.roll(self.frequency_domain_input, self.sources, dims=1)
 
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            block = np.concatenate(
-                (block, np.zeros((1, (self.block_size - block.size)), dtype=np.float32)), 1)
-
-        if self.processCounter == 0:
-            # insert first block to buffer
-            self.buffer[self.block_size:] = block
-
+        # copy input buffers to frequency_domain_inputs
+        if self.stereoInput:
+            self.frequency_domain_input[0, :self.sources, :] = input_buffer[0,:]
+            self.frequency_domain_input[1, :self.sources, :] = input_buffer[1,:]
         else:
-            # shift buffer
-            self.buffer[:self.block_size] = self.buffer[self.block_size:]
-            # insert new block to buffer
-            self.buffer[self.block_size:] = block
-            # shift FDLs
-            self.FDL_left = np.roll(self.FDL_left, 1, axis=0)
-            self.FDL_right = np.roll(self.FDL_right, 1, axis=0)
+            self.frequency_domain_input[0, :self.sources, :] = input_buffer
+            self.frequency_domain_input[1, :self.sources, :] = input_buffer
 
-        # transform buffer into freq domain and copy to FDLs
-        self.FDL_left[0, ] = self.FDL_right[0, ] = self.bufferFftPlan(self.buffer)
+        output = self.multiply_accumulate_ifft(self.filters_blocked, self.irfft_buffer1)
 
-
-    def fill_buffer_stereo(self, block):
-        """
-        Copy stereo soundblock to input Buffer1 and Buffer2;
-        Transform to Freq. Domain and store result in FDLs
-
-        :param block:
-        :return: None
-        """
-
-        if block.size < self.block_size:
-            # print('Fill up last block')
-            # print(np.shape(block))
-            block = np.concatenate(
-                (block, np.zeros(((self.block_size - block.size), 2), dtype=np.float32)), 0)
-
-        if self.processCounter == 0:
-            # insert first block to buffer
-            self.buffer[self.block_size:] = block[:, 0]
-            self.buffer2[self.block_size:] = block[:, 1]
-
-        else:
-            # shift buffer
-            self.buffer[:self.block_size] = self.buffer[self.block_size:]
-            self.buffer2[:self.block_size] = self.buffer2[self.block_size:]
-            # insert new block to buffer
-            self.buffer[self.block_size:] = block[:, 0]
-            self.buffer2[self.block_size:] = block[:, 1]
-            # shift FDLs
-            self.FDL_left = np.roll(self.FDL_left, 1, axis=0)
-            self.FDL_right = np.roll(self.FDL_right, 1, axis=0)
-
-        # transform buffer into freq domain and copy to FDLs
-        self.FDL_left[0, ] = self.bufferFftPlan(self.buffer)
-        self.FDL_right[0, ] = self.buffer2FftPlan(self.buffer2)
-
-    def process(self, block):
-        """
-        Main function
-
-        :param block:
-        :return: (outputLeft, outputRight)
-        """
-
-        # First: Fill buffer and FDLs with current block
-        if not self.processStereo:
-            # print('Convolver Mono Processing')
-            self.fill_buffer_mono(block)
-        else:
-            # print('Convolver Stereo Processing')
-            self.fill_buffer_stereo(block)
-
+        if self.interpolate:
+            output_previous = self.multiply_accumulate_ifft(self.previous_filters_blocked, self.irfft_buffer2)
+            output.mul_(self.crossFadeIn)
+            output_previous.mul_(self.crossFadeOut)
+            output.add_(output_previous)
 
         # Save previous filters
         self.saveOldFilters()
 
-        # Rebuild filter
-        self.buildFilters()
-        
-        # Second: Multiplication with IR block und accumulation
-        self.resultLeftFreq[:] = np.sum(np.multiply(self.TF_left_blocked,self.FDL_left), axis=0)
-        self.resultRightFreq[:] = np.sum(np.multiply(self.TF_right_blocked,self.FDL_right), axis=0)
-
-
-        # Third: Transformation back to time domain
-        self.outputLeft = self.resultLeftIFFTPlan()[self.block_size:self.block_size * 2]
-        self.outputRight = self.resultRightIFFTPlan()[self.block_size:self.block_size * 2]
-
-        # Also convolute old filter amd do crossfade of output block if interpolation is wanted
-        if self.interpolate:
-            self.resultLeftFreqPrevious[:] = np.sum(np.multiply(self.TF_left_blocked_previous, self.FDL_left), axis=0)
-            self.resultRightFreqPrevious[:] = np.sum(np.multiply(self.TF_right_blocked_previous, self.FDL_right), axis=0)
-            # fade over full block size
-            self.outputLeft = np.add(np.multiply(self.outputLeft, self.crossFadeIn),
-                                     np.multiply(self.resultLeftPreviousIFFTPlan()[self.block_size:self.block_size * 2], self.crossFadeOut))
-            self.outputRight = np.add(np.multiply(self.outputRight, self.crossFadeIn),
-                                      np.multiply(self.resultRightPreviousIFFTPlan()[self.block_size:self.block_size*2], self.crossFadeOut))
-
         self.processCounter += 1
-        self.interpolate = False
 
-        return self.outputLeft, self.outputRight, self.processCounter
+        return output
+
+    def multiply_accumulate_ifft(self, filters_blocked, irfft_buffer):
+            torch.multiply(filters_blocked, self.frequency_domain_input, out=self.complex_buffer)
+            
+            # accumulate over blocks and channels for each time and left/right
+            torch.sum(self.complex_buffer, keepdim=True, dim=1, out=self.resultFreq)
+
+            return torch.fft.irfft(self.resultFreq, out=irfft_buffer, dim=2)[:, :, self.block_size:self.block_size * 2]
 
     def close(self):
-        print("Convolver: close")
-        # TODO: do something here?
+        self.log.info("Convolver: close")

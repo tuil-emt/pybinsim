@@ -22,145 +22,143 @@
 
 import logging
 import threading
-import time
+from typing import Any, Final
+from dataclasses import dataclass
 
 import numpy as np
-import soundfile as sf
+
+from pybinsim.player import LoopState, PlayState, Player
+
+logger = logging.getLogger('pybinsim.SoundHandler')
 
 
 class SoundHandler(object):
-    """ Class to read audio from files and serve it to pyBinSim """
+    """Handles multiple players and serves their audio to pyBinSim.
 
-    def __init__(self, block_size, n_channels, fs, loopSound):
+    All methods for getting or setting player data will raise an exception if
+    the player name is unknown.
 
-        self.log = logging.getLogger("pybinsim.SoundHandler")
+    Thread Safety
+    -------------
+    All public methods are thread-safe with the exception of `get_block` and
+    `get_zeros`, which both should only be called from one thread. 
 
-        self.fs = fs
-        self.n_channels = n_channels
-        self.chunk_size = block_size
-        self.bufferSize = block_size * 2
-        self.buffer = np.zeros(
-            [self.n_channels, self.bufferSize], dtype=np.float32)
-        self.sound = np.empty((0, 0))
-        self.sound_file = np.empty((0, 0))
-        self.frame_count = 0
-        self.active_channels = 0
-        self.soundPath = ''
-        self.new_sound_file_request = False
-        self.new_sound_file_loaded = False
-        self.loopSound = loopSound
-        self.currentSoundFile = 1
-        self.soundFileList = []
+    The `_players` dict has to be iterated in `get_block` to get the audio from
+    all players, hence the dict keys must not be modified while `get_block` is
+    running. To ensure this, `_players_lock` must be acquired before all
+    insertions/removals. Keep locked code as short as possible to avoid blocking
+    the audio thread. 
 
-        self._run_file_reader()
+    The data from the player entries is used multiple times during
+    add_at_start_channel. To ensure consistency during such non-atomic read
+    operations, each entry has its own lock that must be acquired before it can
+    be modified or read non-atomically. The contained Player can be modified
+    without acquiring this lock.
+    """
 
-    def buffer_add_silence(self):
-        self.buffer[:self.active_channels, :-
-                    self.chunk_size] = self.buffer[:self.active_channels, self.chunk_size:]
-        self.buffer[:self.active_channels, -self.chunk_size:] = np.zeros([self.active_channels, self.chunk_size],
-                                                                         dtype=np.float32)
+    def __init__(self, block_size, n_channels, fs):
+        self._fs: Final[int] = fs
+        self._n_channels: Final[int] = n_channels
+        self._block_size: Final[int] = block_size
 
-    def buffer_add_sound(self):
-        if (self.frame_count + 1) * self.chunk_size < self.sound.shape[1]:
-            self.buffer[:self.active_channels, :-
-                        self.chunk_size] = self.buffer[:self.active_channels, self.chunk_size:]
-            self.buffer[:self.active_channels, -self.chunk_size:] = self.sound[
-                :self.active_channels,
-                self.frame_count * self.chunk_size: (
-                    self.frame_count + 1) * self.chunk_size
-            ]
-            self.frame_count += 1
-        elif self.currentSoundFile < len(self.soundFileList) and not self.new_sound_file_request:
-            self.request_next_sound_file()
-        elif self.loopSound and not self.new_sound_file_request:
-            self.currentSoundFile = 0
-            self.request_next_sound_file()
-            self.frame_count = 0
-        else:
-            self.buffer_add_silence()
+        self._players: dict[Any, PlayerEntry] = dict()
+        self._players_lock = threading.Lock()
 
-    def buffer_flush(self):
-        self.buffer = np.zeros(
-            [self.n_channels, self.bufferSize], dtype=np.float32)
+        self._output_buffer = np.zeros(
+            (self._n_channels, self._block_size), dtype=np.float32)
 
-    def buffer_read(self):
-        if self.new_sound_file_loaded:
-            self.buffer_flush()
-            self.sound = self.sound_file
-            self.frame_count = 0
-            self.new_sound_file_loaded = False
+    def create_player(self, filepaths, player_name, start_channel=0, loop_state=LoopState.SINGLE, play_state=PlayState.PLAYING, volume=1.):
+        entry = PlayerEntry(
+            Player(filepaths, play_state, loop_state,
+                   self._block_size, self._fs),
+            start_channel,
+            volume,
+            threading.Lock()
+        )
+        with self._players_lock:
+            self._players[player_name] = entry
 
-        buffer_content = self.buffer[:self.active_channels, :-self.chunk_size]
-        self.buffer_add_sound()
-        return buffer_content
+    def get_player(self, player_name):
+        return self._players[player_name].player
 
-    def read_zeros(self):
-        return np.zeros([self.active_channels, self.chunk_size])
+    def stop_all_players(self):
+        empty_players = dict()
+        with self._players_lock:
+            self._players = empty_players
 
-    def _run_file_reader(self):
-        file_read_thread = threading.Thread(target=self.read_sound_file)
-        file_read_thread.daemon = True
-        file_read_thread.start()
+    def get_player_start_channel(self, player_name):
+        return self._players[player_name].start_channel
 
-    def read_sound_file(self):
+    def set_player_start_channel(self, player_name, start_channel):
+        entry = self._players[player_name]
+        with entry.lock:
+            entry.start_channel = start_channel
 
-        while True:
-            if self.new_sound_file_request:
-                #self.log.info('Loading new sound file')
-                audio_file_data, fs = sf.read(self.soundPath, dtype='float32', )
-                assert fs == self.fs
+    def get_player_volume(self, player_name):
+        return self._players[player_name].volume
 
-                self.log.debug("audio_file_data: {} MB".format(
-                    audio_file_data.nbytes // 1024 // 1024))
-                self.sound_file = np.asmatrix(audio_file_data)
+    def set_player_volume(self, player_name, volume: float):
+        entry = self._players[player_name]
+        with entry.lock:
+            entry.volume = volume
 
-                # free data
-                audio_file_data = None
+    def get_block(self, loudness=1.):
+        """Get the next block of audio with shape (`n_channels`, `block_size`).
 
-                if self.sound_file.shape[0] > self.sound_file.shape[1]:
-                    self.sound_file = self.sound_file.transpose()
+        Player channels outside the valid range will be silent.
 
-                self.active_channels = self.sound_file.shape[0]
+        To reduce allocations, this function returns an internal buffer that
+        will be overwritten on the next call of `get_block` or `get_zeros`.
 
-                if self.sound_file.shape[1] % self.chunk_size != 0:
-                    length_diff = self.chunk_size - \
-                        (self.sound_file.shape[1] % self.chunk_size)
-                    zeros = np.zeros(
-                        (self.sound_file.shape[0], length_diff), dtype=np.float32)
+        This function is *not thread safe* and, together with `get_zeros`,
+        should only be called from one thread.
+        """
+        self._output_buffer.fill(0.)
+        with self._players_lock:
+            for entry in self._players.values():
+                with entry.lock:
+                    block = entry.player.get_block()
+                    if block is None:
+                        continue
+                    volume = entry.volume * loudness
+                    add_at_start_channel(
+                        self._output_buffer, volume * block, entry.start_channel)
+            # TODO This might be better done in a background thread so it doesn't block the audio thread, but that needs some benchmarking
+            self._remove_stopped_players()
+        return self._output_buffer
 
-                    self.log.debug("Zeros size: {} Byte".format(zeros.nbytes))
-                    self.log.debug("Zeros shape: {} ({})".format(
-                        zeros.shape, zeros.dtype))
-                    self.log.debug("Soundfile size: {} MiB".format(
-                        self.sound_file.nbytes // 1024 // 1024))
-                    self.log.debug("Soundfile shape: {} ({})".format(
-                        self.sound_file.shape, self.sound_file.dtype))
-                    self.sound_file = np.concatenate(
-                        (self.sound_file, zeros),
-                        1
-                    )
-                    self.log.debug("Soundfile size after concat: {} MiB".format(
-                        self.sound_file.nbytes // 1024 // 1024))
-                    self.log.debug(
-                        "Soundfile shape after concat: {} ({})".format(self.sound_file.shape, self.sound_file.dtype))
-                    self.log.info('Loaded new sound file\n')
-                self.new_sound_file_request = False
-                self.new_sound_file_loaded = True
-            time.sleep(0.05)
+    def get_zeros(self):
+        """Fill the internal buffer with zeros and return it.
 
-    def request_new_sound_file(self, sound_file_list):
+        The internal buffer will be overwritten on the next call of `get_block`
+        or `get_zeros`.
 
-        sound_file_list = str.split(sound_file_list, '#')
-        self.soundPath = sound_file_list[0]
-        self.soundFileList = sound_file_list
-        self.currentSoundFile = 1
-        self.new_sound_file_request = True
+        This function is *not thread safe* and, together with `get_block`,
+        should only be called from one thread.
+        """
+        self._output_buffer.fill(0.)
+        return self._output_buffer
 
-    def request_next_sound_file(self):
+    def _remove_stopped_players(self):
+        players_to_delete = [name for (name, entry) in self._players.items(
+        ) if entry.player.play_state == PlayState.STOPPED]
+        for name in players_to_delete:
+            self._players.pop(name)
 
-        self.currentSoundFile += 1
-        self.soundPath = self.soundFileList[self.currentSoundFile - 1]
-        self.new_sound_file_request = True
 
-    def get_sound_channels(self):
-        return self.active_channels
+@dataclass
+class PlayerEntry:
+    player: Player
+    start_channel: int
+    volume: float
+    lock: threading.Lock
+
+
+def add_at_start_channel(output, input, start_channel):
+    """Add input to output at specified start_channel, ignoring channels outside of output."""
+    input_start = max(0, -start_channel)
+    input_stop = max(min(input.shape[0], output.shape[0]-start_channel), 0)
+    output_start = max(0, start_channel)
+    output_stop = max(start_channel + input.shape[0], 0)
+    output[output_start:output_stop, :] += input[input_start:input_stop, :]
+    return output

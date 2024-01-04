@@ -7,9 +7,16 @@
 **/__pycache__
 pybinsim.egg-info/
 tmp/
+.eggs
 
 # virtual env
 venv*/
 
 # folder holding BRIR wave files
 brirs/
+
+# test files
+junit_results.xml
+
+# profile files
+**.prof*

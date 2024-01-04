@@ -4,7 +4,7 @@ import sys
 from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
-VERSION = "1.2.4"
+VERSION = "1.3"
 
 
 class PyTest(TestCommand):
@@ -28,16 +28,17 @@ setup(
     author='Annika Neidhardt, Florian Klein, Thomas Koellmer',
     author_email='thomas.koellmer@tu-ilmenau.de',
     url='https://github.com/pyBinSim/pyBinSim',
-    tests_require=['pytest'],
+    tests_require=['pytest', 'backoff >= 2.2.1'],
     cmdclass={'test': PyTest},
     install_requires=[
-        "numpy ~= 1.19.2",
-        "sounddevice ~= 0.4.1",
-        "pyfftw ~= 0.12.0",
-        "pyserial ~= 3.4",
-        "pytest ~= 6.1.1",
-        "python-osc ~= 1.7.4",
-        "Soundfile ~= 0.10.3.post1",
+        "numpy >= 1.19.2",
+        "sounddevice >= 0.4.1",
+        "torch >= 1.10.2",
+        "pyserial >= 3.4",
+        "pytest >= 6.1.1",
+        "python-osc >= 1.7.4",
+        "Soundfile >= 0.10.3.post1",
+        "pyzmq >= 22.3.0",
     ],
 
     description='Real-time dynamic binaural synthesis with head tracking.',
@@ -53,8 +54,8 @@ setup(
         'Operating System :: Microsoft :: Windows',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.9',
         'License :: OSI Approved :: MIT License'
     ],
-    python_requires='>=3.6'
+    python_requires='>=3.9'
 )
