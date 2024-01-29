@@ -91,6 +91,12 @@ Start Binaural Simulation::
     with pybinsim.BinSim('pyBinSimSettings.txt') as binsim:
         binsim.stream_start()
 
+Examples
+--------
+
+There are two examples included in this repository in the ``example/brirs`` folder.  ``extract_me_here.zip`` is a ``wav`` example, and ``example_mat_hp.zip`` is a mat example. Both should be extracted exactly where they are and can be used for testing purposes. Due to file size limitations of github, both of these files have been split into three parts.
+
+
 Description
 ===========
 
