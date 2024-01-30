@@ -318,30 +318,30 @@ def audio_callback(binsim):
             input_buffers = binsim.input_Buffer.process(binsim.block)
 
             for n in range(amount_channels):
-                if binsim.oscReceiver.is_ds_filter_update_necessary(n):
+                if binsim.pkgReceiver.is_ds_filter_update_necessary(n):
                     filterList = list()
                     for sourceId in range(amount_channels):
-                        filterValueList = binsim.oscReceiver.get_current_ds_filter_values(sourceId)
+                        filterValueList = binsim.pkgReceiver.get_current_ds_filter_values(sourceId)
                         filter = binsim.filterStorage.get_ds_filter(Pose.from_filterValueList(filterValueList))
                         filterList.append(filter)
                     binsim.ds_convolver.setAllFilters(filterList)
                     break
                     
             for n in range(amount_channels):
-                if binsim.oscReceiver.is_early_filter_update_necessary(n):
+                if binsim.pkgReceiver.is_early_filter_update_necessary(n):
                     filterList = list()
                     for sourceId in range(amount_channels):
-                        filterValueList = binsim.oscReceiver.get_current_early_filter_values(sourceId)
+                        filterValueList = binsim.pkgReceiver.get_current_early_filter_values(sourceId)
                         filter = binsim.filterStorage.get_early_filter(Pose.from_filterValueList(filterValueList))
                         filterList.append(filter)
                     binsim.early_convolver.setAllFilters(filterList)
                     break
 
             for n in range(amount_channels):
-                if binsim.oscReceiver.is_late_filter_update_necessary(n):
+                if binsim.pkgReceiver.is_late_filter_update_necessary(n):
                     filterList = list()
                     for sourceId in range(amount_channels):
-                        filterValueList = binsim.oscReceiver.get_current_late_filter_values(sourceId)
+                        filterValueList = binsim.pkgReceiver.get_current_late_filter_values(sourceId)
                         filter = binsim.filterStorage.get_late_filter(Pose.from_filterValueList(filterValueList))
                         filterList.append(filter)
                     binsim.late_convolver.setAllFilters(filterList)
@@ -350,10 +350,10 @@ def audio_callback(binsim):
             ds = binsim.ds_convolver.process(input_buffers)
             
             for n in range(amount_channels):
-                if binsim.oscReceiver.is_sd_fitler_update_necessary(n):
+                if binsim.pkgReceiver.is_sd_filter_update_necessary(n):
                     sd_filterList = list()
                     for sourceId in range(amount_channels):
-                        filterValueList = binsim.oscReceiver.get_current_sd_filter_values(sourceId)
+                        filterValueList = binsim.pkgReceiver.get_current_sd_filter_values(sourceId)
                         sd_filter = binsim.filterStorage.get_sd_filter(SourcePose.from_filterValueList(filterValueList))
                         sd_filterList.append(sd_filter)
                     binsim.sd_convolver.setAllFilters(sd_filterList)
