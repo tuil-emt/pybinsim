@@ -9,17 +9,30 @@ pyBinSim is a program for audio playback and partitioned convolution in the cont
 Install
 -------
 
-Let's create a virtual environment. Use Conda to do this and then use `pip` to install the dependencies::
+For quick and easy installation, you may use the yml file that has been provided with the repository::
+
+    $ conda env create --name binsim -f environment.yml
+
+For a manual installation or in case something does not work, create a virtual environment and install the necessary dependencies::
 
     $ conda create --name binsim python=3.11
     $ conda activate binsim
-    $ pip install pybinsim
+    $ conda install numpy scipy pyzmq
+    $ pip install sounddevice pysoundfile python-osc
+
+Note: While sounddevice may also be in the conda-forge repository, it is recommended to use the pip version for ASIO support.
+
+Additionally you will have to install pyTorch with the setup that satisfies your needs, e.g. for a conda installation on an NVidia GPU target, you may use::
+
+    $ conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+
+For more on this, see https://pytorch.org/get-started/locally/
 
 
 Linux
 -----
 
-On linux, make sure that gcc and the development headers for libfftw and portaudio are installed, before invoking `pip install pybinsim`.
+On linux, make sure that gcc and the development headers for libfftw and portaudio are installed, before setting up the environment.
 
 For ubuntu
 
@@ -33,23 +46,6 @@ For Fedora
 
     $ sudo dnf install gcc portaudio19-devel fftw-devel
 
-
-python
-
-::
-
-    $ <PathToPython >= 3.10> -m venv venv
-    $ source venv/bin/activate
-    $ pip install pybinsim
-
-
-conda
-
-::
-
-    $ conda create --name binsim python=3.10 numpy
-    $ conda activate binsim
-    $ pip install pybinsim
     
 Run
 ---
@@ -78,6 +74,10 @@ Create a config file with the name ``pyBinSimSettings.txt`` and content like thi
     ds_convolverActive True
     early_convolverActive True
     late_convolverActive True
+    recv_type osc
+    recv_protocol tcp
+    recv_ip 127.0.0.1
+    recv_port 10000
 
 
 Start Binaural Simulation::
@@ -323,6 +323,7 @@ Note:
 #####
 
 ZMQ accepts the same commands as OSC. The only difference is that the command and parameters are encapsulated in a list.
+To switch between OSC and ZMQ change the appropriate entries in the config file.
 
 
 Reference
