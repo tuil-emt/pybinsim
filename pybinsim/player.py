@@ -150,7 +150,7 @@ class Player(object):
 
     def _read_and_queue(self, file_index):
         audio, fs = sf.read(
-            self._filepaths[file_index], dtype='float32')
+            str(self._filepaths[file_index]), dtype='float32')
         assert fs == self._fs
 
         remaining = audio.reshape(
